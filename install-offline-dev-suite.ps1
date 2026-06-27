@@ -90,6 +90,46 @@ function Add-ToProcessPath {
     }
 }
 
+function Ensure-UserPathEntries {
+    param([string[]]$Paths)
+
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $entries = @()
+    if ($userPath) {
+        $entries = $userPath -split ';'
+    }
+
+    $updated = $false
+    foreach ($path in $Paths) {
+        if (-not $path) {
+            continue
+        }
+
+        if (-not (Test-Path $path)) {
+            continue
+        }
+
+        if ($entries -notcontains $path) {
+            $entries += $path
+            $updated = $true
+        }
+    }
+
+    if ($updated) {
+        $newUserPath = ($entries | Where-Object { $_ }) -join ';'
+        [Environment]::SetEnvironmentVariable("Path", $newUserPath, "User")
+    }
+}
+
+function Refresh-ProcessPathFromRegistry {
+    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $combined = @($machinePath, $userPath) | Where-Object { $_ }
+    if ($combined.Count -gt 0) {
+        $env:PATH = ($combined -join ';')
+    }
+}
+
 function Resolve-VSCodeCommand {
     $candidatePaths = @()
 
@@ -176,8 +216,10 @@ Assert-PathExists -Path $vscodeInstaller -Description "Rebuilt VS Code installer
 if (-not $SkipVSCode) {
     Invoke-Installer -FilePath $vscodeInstaller -Description "Installing Visual Studio Code" -Arguments @(
         "/VERYSILENT",
+        "/SP-",
+        "/SUPPRESSMSGBOXES",
         "/NORESTART",
-        "/MERGETASKS=!runcode"
+        "/MERGETASKS=!runcode,addcontextmenufiles,addcontextmenufolders,associatewithfiles,addtopath"
     )
 }
 
@@ -194,8 +236,11 @@ $pythonPathCandidates = @(
     (Join-Path $PythonInstallDir "Scripts")
 )
 
+Ensure-UserPathEntries -Paths ($gitPathCandidates + $vsCodeBinCandidates + $pythonPathCandidates)
+Refresh-ProcessPathFromRegistry
 Add-ToProcessPath -Paths ($gitPathCandidates + $vsCodeBinCandidates + $pythonPathCandidates)
 
+$venvPython = $null
 if (-not $SkipPythonPackages) {
     Write-Step "Creating Python virtual environment"
     & $pythonExe -m venv $VenvPath
@@ -224,8 +269,29 @@ if (-not $SkipVSCodeExtensions) {
     & $vscodeExtensionsInstaller
 }
 
+Write-Step "Installed tool versions"
+$gitCommand = Get-Command git -ErrorAction SilentlyContinue
+if ($gitCommand) {
+    & $gitCommand.Source --version
+}
+
+& $pythonExe --version
+
+if ($venvPython) {
+    & $venvPython --version
+}
+
+$codeCommand = Resolve-VSCodeCommand
+if ($codeCommand) {
+    $codeVersion = & $codeCommand --version
+    if ($codeVersion) {
+        $codeVersion | Select-Object -First 1 | ForEach-Object { Write-Host "VS Code $_" }
+    }
+}
+
 Write-Step "Offline development suite installation completed"
 Write-Host "Python installed to: $PythonInstallDir"
 Write-Host "Virtual environment: $VenvPath"
 Write-Host "Repo-local Python packages came from: $pythonWheelhouse"
 Write-Host "VS Code extensions installed from: $vscodeExtensionsDir"
+Write-Host "If this was run from an old terminal window, open a new terminal to pick up updated PATH and shell integrations."

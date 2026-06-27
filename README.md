@@ -21,3 +21,9 @@ The installer script performs a per-user setup of:
 - Visual Studio Code
 - the offline Python package bundle from `wheelhouse/py313-windows-x86_64`
 - the saved VS Code extensions from `vscode-extensions`
+
+It also:
+
+- enables the VS Code Explorer context menu entries
+- adds VS Code and Python locations to the user PATH
+- prints the installed Git, Python, venv Python, and VS Code versions at the end
