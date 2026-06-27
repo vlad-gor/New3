@@ -24,6 +24,8 @@ The pinned bundle includes:
 - `ipykernel`
 - `matplotlib`
 - `matplotlib-venn`
+- `pyinstaller`
+- `auto-py-to-exe`
 - `docxtpl`
 - `lxml`
 - `openpyxl`

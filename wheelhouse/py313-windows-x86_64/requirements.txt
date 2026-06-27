@@ -1,3 +1,4 @@
+altgraph==0.17.5
 anyio==4.14.1
 argon2-cffi==25.1.0
 argon2-cffi-bindings==25.1.0
@@ -5,9 +6,12 @@ arrow==1.4.0
 asttokens==3.0.1
 async-lru==2.3.0
 attrs==26.1.0
+auto-py-to-exe==2.50.1
 babel==2.18.0
 beautifulsoup4==4.15.0
 bleach==6.4.0
+bottle==0.13.4
+bottle-websocket==0.2.9
 certifi==2026.6.17
 cffi==2.0.0
 charset-normalizer==3.4.7
@@ -19,15 +23,21 @@ debugpy==1.8.21
 decorator==5.3.1
 defusedxml==0.7.1
 docxtpl==0.20.2
+Eel==0.18.2
 et_xmlfile==2.0.0
 executing==2.2.1
 fastjsonschema==2.21.2
 fonttools==4.63.0
 fqdn==1.5.1
+future==1.0.0
+gevent==26.5.0
+gevent-websocket==0.10.1
+greenlet==3.5.3
 h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1
 idna==3.18
+importlib_resources==7.1.0
 ipykernel==7.3.0
 ipython==9.15.0
 ipython_pygments_lexers==1.1.1
@@ -68,6 +78,7 @@ packaging==26.2
 pandas==3.0.3
 pandocfilters==1.5.1
 parso==0.8.7
+pefile==2024.8.26
 pexpect==4.9.0
 pillow==12.2.0
 platformdirs==4.10.0
@@ -78,10 +89,13 @@ ptyprocess==0.7.0
 pure_eval==0.2.3
 pycparser==3.0
 Pygments==2.20.0
+pyinstaller==6.21.0
+pyinstaller-hooks-contrib==2026.6
 pyparsing==3.3.2
 python-dateutil==2.9.0.post0
 python-docx==1.2.0
 python-json-logger==4.1.0
+pywin32-ctypes==0.2.3
 pywinpty==3.0.5
 pyxlsb==1.0.10
 PyYAML==6.0.3
@@ -94,6 +108,7 @@ rfc3987-syntax==1.1.0
 rpds-py==2026.5.1
 scipy==1.18.0
 Send2Trash==2.1.0
+setuptools==82.0.1
 six==1.17.0
 soupsieve==2.8.4
 stack-data==0.6.3
@@ -109,4 +124,7 @@ wcwidth==0.8.1
 webcolors==25.10.0
 webencodings==0.5.1
 websocket-client==1.9.0
+whichcraft==0.6.1
 xlsxwriter==3.2.9
+zope.event==6.2
+zope.interface==8.5

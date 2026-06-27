@@ -138,12 +138,15 @@ jobs:
           import numpy
           import openpyxl
           import pandas
+          import PyInstaller
           import pyxlsb
           import xlsxwriter
           from docx import Document
+          from importlib import metadata
           from PIL import Image
 
           print(f"python={platform.python_version()}")
+          print(f"auto-py-to-exe={metadata.version('auto-py-to-exe')}")
           print(f"docxtpl={getattr(docxtpl, '__version__', 'imported')}")
           print(f"ipykernel={ipykernel.__version__}")
           print(f"lxml={etree.LXML_VERSION}")
@@ -154,6 +157,7 @@ jobs:
           print(f"openpyxl={openpyxl.__version__}")
           print(f"pandas={pandas.__version__}")
           print(f"pillow={Image.__version__}")
+          print(f"pyinstaller={PyInstaller.__version__}")
           print(f"pyxlsb={pyxlsb.__version__}")
           print(f"xlsxwriter={xlsxwriter.__version__}")
           doc = Document()
@@ -170,6 +174,7 @@ jobs:
           Set-Content -Path $scriptPath -Value $code -Encoding ascii
           & $venvPython $scriptPath
           & $venvPython -m notebook --version
+          & $venvPython -m PyInstaller --version
 
       - name: Publish job summary
         shell: pwsh
@@ -180,5 +185,5 @@ jobs:
           - Runner: `${{ matrix.runner }}`
           - Installer: `$env:INSTALLER_PATH`
           - Wheelhouse: `$env:WHEELHOUSE_DIR`
-          - Verified: installer checksum, silent install, venv creation, offline wheel installation, notebook stack import, matplotlib/matplotlib-venn/docxtpl/lxml/openpyxl/pillow/docx/pyxlsb/xlsxwriter import, notebook version command
+          - Verified: installer checksum, silent install, venv creation, offline wheel installation, notebook stack import, matplotlib/matplotlib-venn/docxtpl/lxml/openpyxl/pillow/docx/pyxlsb/xlsxwriter import, pyinstaller/auto-py-to-exe import, notebook version command, PyInstaller version command
           "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
