@@ -130,15 +130,25 @@ jobs:
           import platform
           import sys
           import ipykernel
+          import matplotlib
           import notebook
           import numpy
           import pandas
+          import pyxlsb
+          import xlsxwriter
+          from docx import Document
 
           print(f"python={platform.python_version()}")
           print(f"ipykernel={ipykernel.__version__}")
+          print(f"matplotlib={matplotlib.__version__}")
           print(f"notebook={notebook.__version__}")
           print(f"numpy={numpy.__version__}")
           print(f"pandas={pandas.__version__}")
+          print(f"pyxlsb={pyxlsb.__version__}")
+          print(f"xlsxwriter={xlsxwriter.__version__}")
+          doc = Document()
+          doc.add_paragraph(\"offline-docx-check\")
+          print(f\"python-docx-paragraphs={len(doc.paragraphs)}\")
           print(f"executable={sys.executable}")
           '@
 
@@ -156,5 +166,5 @@ jobs:
           - Runner: `${{ matrix.runner }}`
           - Installer: `$env:INSTALLER_PATH`
           - Wheelhouse: `$env:WHEELHOUSE_DIR`
-          - Verified: installer checksum, silent install, venv creation, offline wheel installation, numpy/pandas/notebook/ipykernel import, notebook version command
+          - Verified: installer checksum, silent install, venv creation, offline wheel installation, notebook stack import, matplotlib/docx/pyxlsb/xlsxwriter import, notebook version command
           "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append

@@ -22,6 +22,10 @@ The pinned bundle includes:
 - `pandas`
 - `notebook`
 - `ipykernel`
+- `matplotlib`
+- `python-docx`
+- `pyxlsb`
+- `xlsxwriter`
 - the runtime dependencies required to launch Jupyter Notebook offline
 
 Example launch after installation:
