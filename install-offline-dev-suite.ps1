@@ -1,6 +1,6 @@
 param(
     [string]$PythonInstallDir = (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313"),
-    [switch]$RegisterJupyterKernel,
+    [switch]$SkipJupyterKernelRegistration,
     [switch]$SkipGit,
     [switch]$SkipVSCode,
     [switch]$SkipPythonPackages,
@@ -244,7 +244,7 @@ if (-not $SkipPythonPackages) {
     Write-Step "Installing offline Python package bundle globally"
     & $pythonExe -m pip install --no-index --find-links $pythonWheelhouse -r $pythonRequirements
 
-    if ($RegisterJupyterKernel) {
+    if (-not $SkipJupyterKernelRegistration) {
         Write-Step "Registering Jupyter kernel"
         & $pythonExe -m ipykernel install --user --name "offline-dev-py313" --display-name "Offline Dev Python 3.13"
     }
@@ -271,6 +271,10 @@ if ($gitCommand) {
 & $pythonExe --version
 & $pythonExe -m pip --version
 & $pythonExe -c "import PyInstaller; from importlib import metadata; print('pyinstaller=' + PyInstaller.__version__); print('auto-py-to-exe=' + metadata.version('auto-py-to-exe'))"
+
+if (-not $SkipPythonPackages -and -not $SkipJupyterKernelRegistration) {
+    Write-Host "jupyter-kernel=Offline Dev Python 3.13"
+}
 
 $codeCommand = Resolve-VSCodeCommand
 if ($codeCommand) {

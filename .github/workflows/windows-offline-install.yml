@@ -129,6 +129,7 @@ jobs:
         shell: pwsh
         run: |
           $pythonExe = "${{ steps.install-python.outputs.python_exe }}"
+          & $pythonExe -m ipykernel install --user --name "offline-dev-py313" --display-name "Offline Dev Python 3.13"
           $code = @'
           import platform
           import sys
