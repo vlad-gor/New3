@@ -46,7 +46,7 @@ function Assert-ChecksumFile {
     foreach ($line in $lines) {
         $parts = $line -split "\s+", 2
         if ($parts.Count -ne 2) {
-            throw "Invalid checksum line in $ChecksumFile: $line"
+            throw "Invalid checksum line in ${ChecksumFile}: $line"
         }
 
         $expectedHash = $parts[0].Trim().ToLowerInvariant()
