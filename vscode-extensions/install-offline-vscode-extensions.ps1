@@ -14,7 +14,31 @@ $extensionFiles = @(
 )
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$codeCommand = Get-Command code -ErrorAction Stop
+
+$candidateCommands = @()
+if ($env:VSCODE_COMMAND) {
+    $candidateCommands += $env:VSCODE_COMMAND
+}
+
+$commandFromPath = Get-Command code -ErrorAction SilentlyContinue
+if ($commandFromPath) {
+    $candidateCommands += $commandFromPath.Source
+}
+
+$candidateCommands += @(
+    (Join-Path $env:LOCALAPPDATA "Programs\Microsoft VS Code\bin\code.cmd"),
+    (Join-Path $env:LOCALAPPDATA "Programs\Microsoft VS Code\Code.exe"),
+    (Join-Path ${env:ProgramFiles} "Microsoft VS Code\bin\code.cmd"),
+    (Join-Path ${env:ProgramFiles} "Microsoft VS Code\Code.exe")
+)
+
+$codeCommandPath = $candidateCommands |
+    Where-Object { $_ -and (Test-Path $_) } |
+    Select-Object -First 1
+
+if (-not $codeCommandPath) {
+    throw "Could not locate VS Code command. Set VSCODE_COMMAND or install VS Code first."
+}
 
 foreach ($file in $extensionFiles) {
     $path = Join-Path $scriptDir $file
@@ -23,7 +47,7 @@ foreach ($file in $extensionFiles) {
     }
 
     Write-Host "Installing $file"
-    & $codeCommand.Source --install-extension $path
+    & $codeCommandPath --install-extension $path
 }
 
 Write-Host "Offline VS Code extension installation completed."
