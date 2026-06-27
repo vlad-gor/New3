@@ -42,6 +42,26 @@ jobs:
           Write-Host "Image version: $env:ImageVersion"
           cmd /c ver
 
+      - name: Parse PowerShell installer scripts
+        shell: pwsh
+        run: |
+          $files = @(
+            "install-offline-dev-suite.ps1",
+            "vscode-extensions/install-offline-vscode-extensions.ps1",
+            "installers/vscode/rebuild-vscode-installer.ps1"
+          )
+
+          foreach ($relativePath in $files) {
+            $fullPath = Join-Path $env:GITHUB_WORKSPACE $relativePath
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($fullPath, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $messages = $errors | ForEach-Object { $_.Message }
+              throw "PowerShell parse failed for $relativePath :: $($messages -join '; ')"
+            }
+          }
+
       - name: Verify offline assets exist
         shell: pwsh
         run: |
