@@ -16,4 +16,18 @@ py -3.13 -m pip install --no-index `
   -r wheelhouse/py313-windows-x86_64/requirements.txt
 ```
 
+The pinned bundle includes:
+
+- `numpy`
+- `pandas`
+- `notebook`
+- `ipykernel`
+- the runtime dependencies required to launch Jupyter Notebook offline
+
+Example launch after installation:
+
+```powershell
+py -3.13 -m notebook
+```
+
 This bundle is platform-specific and targets Windows x86_64.
