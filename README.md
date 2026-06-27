@@ -27,4 +27,5 @@ It also:
 - enables the VS Code Explorer context menu entries
 - adds VS Code and Python locations to the user PATH
 - registers a ready-to-use Jupyter kernel named `Offline Dev Python 3.13`
+- creates or updates VS Code user settings so `python.defaultInterpreterPath` points at the installed Python 3.13
 - prints the installed Git, Python, pip, packaging-tool versions, and VS Code versions at the end

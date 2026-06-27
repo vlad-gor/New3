@@ -153,6 +153,92 @@ function Resolve-VSCodeCommand {
         Select-Object -First 1
 }
 
+function Update-VSCodeSettings {
+    param(
+        [string]$PythonExe,
+        [string]$InterpreterPath
+    )
+
+    $settingsDir = Join-Path $env:APPDATA "Code\User"
+    $settingsPath = Join-Path $settingsDir "settings.json"
+    New-Item -ItemType Directory -Force -Path $settingsDir | Out-Null
+
+    $updatedWithPython = $false
+    if (Test-Path $PythonExe) {
+        $tempScript = Join-Path $env:TEMP "offline_dev_suite_update_vscode_settings.py"
+        $scriptContent = @'
+import json
+import os
+import shutil
+import sys
+
+settings_path = sys.argv[1]
+interpreter_path = sys.argv[2]
+data = {}
+
+if os.path.exists(settings_path):
+    raw = open(settings_path, "r", encoding="utf-8").read()
+    if raw.strip():
+        loaded = None
+        try:
+            import json5
+            loaded = json5.loads(raw)
+        except Exception:
+            try:
+                loaded = json.loads(raw)
+            except Exception:
+                backup_path = settings_path + ".backup"
+                if not os.path.exists(backup_path):
+                    shutil.copyfile(settings_path, backup_path)
+                loaded = {}
+        if isinstance(loaded, dict):
+            data = loaded
+
+data["python.defaultInterpreterPath"] = interpreter_path
+data["jupyter.jupyterServerType"] = "local"
+
+with open(settings_path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, indent=2, ensure_ascii=False)
+    handle.write("\n")
+'@
+        Set-Content -Path $tempScript -Value $scriptContent -Encoding utf8
+        try {
+            & $PythonExe $tempScript $settingsPath $InterpreterPath
+            if ($LASTEXITCODE -eq 0) {
+                $updatedWithPython = $true
+            }
+        }
+        finally {
+            Remove-Item -Path $tempScript -ErrorAction SilentlyContinue
+        }
+    }
+
+    if (-not $updatedWithPython) {
+        $settingsObject = [pscustomobject]@{}
+        if (Test-Path $settingsPath) {
+            $raw = Get-Content -Path $settingsPath -Raw
+            if ($raw.Trim()) {
+                try {
+                    $settingsObject = $raw | ConvertFrom-Json
+                }
+                catch {
+                    $backupPath = "$settingsPath.backup"
+                    if (-not (Test-Path $backupPath)) {
+                        Copy-Item -Path $settingsPath -Destination $backupPath
+                    }
+                    $settingsObject = [pscustomobject]@{}
+                }
+            }
+        }
+
+        $settingsObject | Add-Member -NotePropertyName "python.defaultInterpreterPath" -NotePropertyValue $InterpreterPath -Force
+        $settingsObject | Add-Member -NotePropertyName "jupyter.jupyterServerType" -NotePropertyValue "local" -Force
+        $settingsObject | ConvertTo-Json -Depth 20 | Set-Content -Path $settingsPath -Encoding utf8
+    }
+
+    Write-Host "vscode-settings=$settingsPath"
+}
+
 $pythonInstaller = Join-Path $PSScriptRoot "installers\python-3.13.14-amd64.exe"
 $gitInstaller = Join-Path $PSScriptRoot "installers\git\Git-2.54.0-64-bit.exe"
 $gitChecksumFile = Join-Path $PSScriptRoot "installers\git\Git-2.54.0-64-bit.exe.sha256"
@@ -261,6 +347,9 @@ if (-not $SkipVSCodeExtensions) {
     Write-Step "Installing offline VS Code extensions"
     & $vscodeExtensionsInstaller
 }
+
+Write-Step "Updating VS Code user settings"
+Update-VSCodeSettings -PythonExe $pythonExe -InterpreterPath $pythonExe
 
 Write-Step "Installed tool versions"
 $gitCommand = Get-Command git -ErrorAction SilentlyContinue
