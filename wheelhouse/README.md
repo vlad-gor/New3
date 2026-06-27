@@ -23,6 +23,11 @@ The pinned bundle includes:
 - `notebook`
 - `ipykernel`
 - `matplotlib`
+- `matplotlib-venn`
+- `docxtpl`
+- `lxml`
+- `openpyxl`
+- `pillow`
 - `python-docx`
 - `pyxlsb`
 - `xlsxwriter`
