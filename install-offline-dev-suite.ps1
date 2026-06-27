@@ -1,6 +1,5 @@
 param(
     [string]$PythonInstallDir = (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313"),
-    [string]$VenvPath = (Join-Path $PSScriptRoot ".venv"),
     [switch]$RegisterJupyterKernel,
     [switch]$SkipGit,
     [switch]$SkipVSCode,
@@ -203,7 +202,8 @@ Invoke-Installer -FilePath $pythonInstaller -Description "Installing Python 3.13
     "Shortcuts=0",
     "PrependPath=1",
     "Include_launcher=1",
-    "InstallLauncherAllUsers=0"
+    "InstallLauncherAllUsers=0",
+    "SimpleInstall=1"
 )
 
 $pythonExe = Join-Path $PythonInstallDir "python.exe"
@@ -240,20 +240,13 @@ Ensure-UserPathEntries -Paths ($gitPathCandidates + $vsCodeBinCandidates + $pyth
 Refresh-ProcessPathFromRegistry
 Add-ToProcessPath -Paths ($gitPathCandidates + $vsCodeBinCandidates + $pythonPathCandidates)
 
-$venvPython = $null
 if (-not $SkipPythonPackages) {
-    Write-Step "Creating Python virtual environment"
-    & $pythonExe -m venv $VenvPath
-
-    $venvPython = Join-Path $VenvPath "Scripts\python.exe"
-    Assert-PathExists -Path $venvPython -Description "Virtual environment python executable"
-
-    Write-Step "Installing offline Python package bundle"
-    & $venvPython -m pip install --no-index --find-links $pythonWheelhouse -r $pythonRequirements
+    Write-Step "Installing offline Python package bundle globally"
+    & $pythonExe -m pip install --no-index --find-links $pythonWheelhouse -r $pythonRequirements
 
     if ($RegisterJupyterKernel) {
         Write-Step "Registering Jupyter kernel"
-        & $venvPython -m ipykernel install --user --name "offline-dev-py313" --display-name "Offline Dev Python 3.13"
+        & $pythonExe -m ipykernel install --user --name "offline-dev-py313" --display-name "Offline Dev Python 3.13"
     }
 }
 
@@ -276,10 +269,8 @@ if ($gitCommand) {
 }
 
 & $pythonExe --version
-
-if ($venvPython) {
-    & $venvPython --version
-}
+& $pythonExe -m pip --version
+& $pythonExe -c "import PyInstaller; from importlib import metadata; print('pyinstaller=' + PyInstaller.__version__); print('auto-py-to-exe=' + metadata.version('auto-py-to-exe'))"
 
 $codeCommand = Resolve-VSCodeCommand
 if ($codeCommand) {
@@ -291,7 +282,7 @@ if ($codeCommand) {
 
 Write-Step "Offline development suite installation completed"
 Write-Host "Python installed to: $PythonInstallDir"
-Write-Host "Virtual environment: $VenvPath"
+Write-Host "Global site-packages: $(Join-Path $PythonInstallDir 'Lib\site-packages')"
 Write-Host "Repo-local Python packages came from: $pythonWheelhouse"
 Write-Host "VS Code extensions installed from: $vscodeExtensionsDir"
 Write-Host "If this was run from an old terminal window, open a new terminal to pick up updated PATH and shell integrations."
