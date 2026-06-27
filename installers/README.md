@@ -35,3 +35,12 @@ Files:
 - `vscode/rebuild-vscode-installer.ps1`: helper script to rebuild the installer from the saved parts
 
 See `installers/vscode/README.md` for the source URL, checksum, and example usage.
+
+## Git for Windows
+
+Files:
+
+- `git/Git-2.54.0-64-bit.exe`: official 64-bit Git for Windows installer
+- `git/Git-2.54.0-64-bit.exe.sha256`: saved checksum file
+
+See `installers/git/README.md` for the source URL, checksum, and example usage.

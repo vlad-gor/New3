@@ -1,5 +1,15 @@
 [
   {
+    "id": "eamodio.gitlens",
+    "display_name": "GitLens \u2014 Git supercharged",
+    "version": "2026.6.270545",
+    "filename": "eamodio.gitlens-2026.6.270545.vsix",
+    "sha256": "b905d38d5bd1cd794bec08a463ff23c7a18940127585e5166109ddbb5251e905",
+    "source": "https://eamodio.gallerycdn.vsassets.io/extensions/eamodio/gitlens/2026.6.270545/1782553625324/Microsoft.VisualStudio.Services.VSIXPackage",
+    "extensionDependencies": [],
+    "extensionPack": []
+  },
+  {
     "id": "ms-python.debugpy",
     "display_name": "Python Debugger",
     "version": "2026.7.11751011",

@@ -1,12 +1,13 @@
 # VS Code offline extensions
 
 This directory contains VSIX packages for offline installation of VS Code
-extensions used for Python development and Jupyter notebooks.
+extensions used for Python development, Jupyter notebooks, and Git work.
 
 ## Included extensions
 
 Primary extensions:
 
+- `eamodio.gitlens-2026.6.270545.vsix`
 - `ms-python.python-2026.5.2026061001.vsix`
 - `ms-toolsai.jupyter-2026.6.2026061001.vsix`
 
@@ -38,6 +39,7 @@ Run the helper script from this directory:
 Install the VSIX files in this order:
 
 ```powershell
+code --install-extension .\eamodio.gitlens-2026.6.270545.vsix
 code --install-extension .\ms-python.python-2026.5.2026061001.vsix
 code --install-extension .\ms-python.vscode-pylance-2026.2.106.vsix
 code --install-extension .\ms-python.debugpy-2026.7.11751011.vsix

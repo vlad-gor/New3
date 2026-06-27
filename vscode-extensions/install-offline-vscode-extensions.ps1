@@ -1,6 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $extensionFiles = @(
+    "eamodio.gitlens-2026.6.270545.vsix",
     "ms-python.python-2026.5.2026061001.vsix",
     "ms-python.vscode-pylance-2026.2.106.vsix",
     "ms-python.debugpy-2026.7.11751011.vsix",
