@@ -1,29 +1,37 @@
-# Python installer
+# Offline installers
 
-This directory contains the saved Windows installer for Python 3.13.
+This directory contains saved Windows installers used by this repository.
 
-## File
+## Python 3.13
+
+File:
 
 - `python-3.13.14-amd64.exe`: official 64-bit Windows installer for Python 3.13.14
 
-## Source
+Source:
 
 - https://www.python.org/ftp/python/3.13.14/python-3.13.14-amd64.exe
 
-## SHA-256
+SHA-256:
 
 `c54d9b9bbb8a36e6489363ddd01139707fd781d72f1f9e90c7ec65d0061368e0`
 
-## Example usage
-
-Interactive install:
+Example usage:
 
 ```powershell
 .\python-3.13.14-amd64.exe
 ```
 
-Silent install for all users with PATH enabled:
-
 ```powershell
 .\python-3.13.14-amd64.exe /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
 ```
+
+## VS Code
+
+Files:
+
+- `vscode/parts/VSCodeUserSetup-x64-1.126.0.exe.part*`: split archive parts for the official Windows x64 user installer
+- `vscode/VSCodeUserSetup-x64-1.126.0.exe.sha256`: checksum for the rebuilt installer
+- `vscode/rebuild-vscode-installer.ps1`: helper script to rebuild the installer from the saved parts
+
+See `installers/vscode/README.md` for the source URL, checksum, and example usage.
