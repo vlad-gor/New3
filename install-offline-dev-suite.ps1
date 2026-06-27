@@ -1,6 +1,3 @@
-$ErrorActionPreference = "Stop"
-Set-StrictMode -Version Latest
-
 param(
     [string]$PythonInstallDir = (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313"),
     [string]$VenvPath = (Join-Path $PSScriptRoot ".venv"),
@@ -10,6 +7,9 @@ param(
     [switch]$SkipPythonPackages,
     [switch]$SkipVSCodeExtensions
 )
+
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
 
 function Write-Step {
     param([string]$Message)
