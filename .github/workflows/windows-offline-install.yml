@@ -1,0 +1,155 @@
+name: Test offline Python install on Windows
+
+on:
+  push:
+    branches:
+      - main
+      - cursor/**
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  offline-install:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # GitHub-hosted x64 Windows runners are Windows Server images.
+          # They are the closest available hosted coverage for desktop Windows.
+          - name: Hosted Windows x64 (windows-2022)
+            runner: windows-2022
+          - name: Hosted Windows x64 (windows-2025)
+            runner: windows-2025
+
+    env:
+      INSTALLER_PATH: installers/python-3.13.14-amd64.exe
+      INSTALLER_SHA256: c54d9b9bbb8a36e6489363ddd01139707fd781d72f1f9e90c7ec65d0061368e0
+      WHEELHOUSE_DIR: wheelhouse/py313-windows-x86_64
+      REQUIREMENTS_FILE: wheelhouse/py313-windows-x86_64/requirements.txt
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show runner details
+        shell: pwsh
+        run: |
+          Write-Host "Runner label: ${{ matrix.runner }}"
+          Write-Host "Image OS: $env:ImageOS"
+          Write-Host "Image version: $env:ImageVersion"
+          cmd /c ver
+
+      - name: Verify offline assets exist
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:GITHUB_WORKSPACE $env:INSTALLER_PATH
+          $wheelhouse = Join-Path $env:GITHUB_WORKSPACE $env:WHEELHOUSE_DIR
+          $requirements = Join-Path $env:GITHUB_WORKSPACE $env:REQUIREMENTS_FILE
+
+          foreach ($path in @($installer, $wheelhouse, $requirements)) {
+            if (-not (Test-Path $path)) {
+              throw "Required offline asset not found: $path"
+            }
+          }
+
+      - name: Verify installer checksum
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:GITHUB_WORKSPACE $env:INSTALLER_PATH
+          $actual = (Get-FileHash -Path $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $env:INSTALLER_SHA256) {
+            throw "Installer checksum mismatch. Expected $env:INSTALLER_SHA256, got $actual"
+          }
+
+      - name: Install Python 3.13 from saved installer
+        id: install-python
+        shell: pwsh
+        run: |
+          $installRoot = Join-Path $env:RUNNER_TEMP "python313-offline"
+          New-Item -ItemType Directory -Force -Path $installRoot | Out-Null
+
+          $installer = Join-Path $env:GITHUB_WORKSPACE $env:INSTALLER_PATH
+          $arguments = @(
+            "/quiet",
+            "InstallAllUsers=0",
+            "TargetDir=$installRoot",
+            "Include_pip=1",
+            "Include_test=0",
+            "AssociateFiles=0",
+            "Shortcuts=0",
+            "PrependPath=0"
+          )
+
+          $process = Start-Process -FilePath $installer -ArgumentList $arguments -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Python installer failed with exit code $($process.ExitCode)"
+          }
+
+          $pythonExe = Join-Path $installRoot "python.exe"
+          if (-not (Test-Path $pythonExe)) {
+            throw "Installed python executable not found at $pythonExe"
+          }
+
+          & $pythonExe --version
+          "python_exe=$pythonExe" >> $env:GITHUB_OUTPUT
+
+      - name: Create isolated virtual environment
+        id: create-venv
+        shell: pwsh
+        run: |
+          $pythonExe = "${{ steps.install-python.outputs.python_exe }}"
+          $venvDir = Join-Path $env:RUNNER_TEMP "offline-test-venv"
+
+          & $pythonExe -m venv $venvDir
+
+          $venvPython = Join-Path $venvDir "Scripts\python.exe"
+          if (-not (Test-Path $venvPython)) {
+            throw "Virtual environment python not found at $venvPython"
+          }
+
+          & $venvPython --version
+          "venv_python=$venvPython" >> $env:GITHUB_OUTPUT
+
+      - name: Install wheels without network access
+        shell: pwsh
+        run: |
+          $venvPython = "${{ steps.create-venv.outputs.venv_python }}"
+          $wheelhouse = Join-Path $env:GITHUB_WORKSPACE $env:WHEELHOUSE_DIR
+          $requirements = Join-Path $env:GITHUB_WORKSPACE $env:REQUIREMENTS_FILE
+
+          & $venvPython -m pip install --no-index --find-links $wheelhouse -r $requirements
+
+      - name: Verify imported package versions
+        shell: pwsh
+        run: |
+          $venvPython = "${{ steps.create-venv.outputs.venv_python }}"
+          $code = @'
+          import platform
+          import sys
+          import numpy
+          import pandas
+
+          print(f"python={platform.python_version()}")
+          print(f"numpy={numpy.__version__}")
+          print(f"pandas={pandas.__version__}")
+          print(f"executable={sys.executable}")
+          '@
+
+          $scriptPath = Join-Path $env:RUNNER_TEMP "verify_offline_install.py"
+          Set-Content -Path $scriptPath -Value $code -Encoding ascii
+          & $venvPython $scriptPath
+
+      - name: Publish job summary
+        shell: pwsh
+        run: |
+          @"
+          ## Offline Windows install test
+
+          - Runner: `${{ matrix.runner }}`
+          - Installer: `$env:INSTALLER_PATH`
+          - Wheelhouse: `$env:WHEELHOUSE_DIR`
+          - Verified: installer checksum, silent install, venv creation, offline wheel installation, numpy/pandas import
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
