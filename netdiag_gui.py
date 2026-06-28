@@ -14,7 +14,9 @@ from netdiag_core import (
     DEFAULT_STARTUP_DELAY,
     DEFAULT_SAVE_FORMAT,
     DiagnosticReport,
+    DiscoveryReport,
     RuntimeOptions,
+    discover_only,
     render_text_report,
     run_diagnostics,
     save_report_to_path,
@@ -43,7 +45,9 @@ class NetDiagGui:
         self.queue: "queue.Queue[tuple[str, object]]" = queue.Queue()
         self.worker: Optional[threading.Thread] = None
         self.current_report: Optional[DiagnosticReport] = None
+        self.current_discovery_report: Optional[DiscoveryReport] = None
         self.current_text_report = ""
+        self.discovered_peers: list[dict[str, object]] = []
 
         self.peer_var = tk.StringVar()
         self.port_var = tk.StringVar(value=str(DEFAULT_HTTP_PORT))
@@ -114,21 +118,56 @@ class NetDiagGui:
 
         button_frame = ttk.Frame(top)
         button_frame.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(12, 0))
-        button_frame.columnconfigure(3, weight=1)
+        button_frame.columnconfigure(5, weight=1)
 
+        self.search_button = ttk.Button(button_frame, text="Search peers", command=self._search_peers)
+        self.search_button.grid(row=0, column=0, padx=(0, 8))
         self.run_button = ttk.Button(button_frame, text="Run diagnostics", command=self._run_diagnostics)
-        self.run_button.grid(row=0, column=0, padx=(0, 8))
-        ttk.Button(button_frame, text="Save current report", command=self._save_current_report).grid(row=0, column=1, padx=(0, 8))
-        ttk.Button(button_frame, text="Clear output", command=self._clear_output).grid(row=0, column=2, padx=(0, 8))
-        ttk.Label(button_frame, textvariable=self.status_var).grid(row=0, column=3, sticky="e")
+        self.run_button.grid(row=0, column=1, padx=(0, 8))
+        self.use_selected_button = ttk.Button(button_frame, text="Use selected peer", command=self._use_selected_peer)
+        self.use_selected_button.grid(row=0, column=2, padx=(0, 8))
+        ttk.Button(button_frame, text="Save current report", command=self._save_current_report).grid(row=0, column=3, padx=(0, 8))
+        ttk.Button(button_frame, text="Clear output", command=self._clear_output).grid(row=0, column=4, padx=(0, 8))
+        ttk.Label(button_frame, textvariable=self.status_var).grid(row=0, column=5, sticky="e")
 
         output_frame = ttk.Frame(self.root, padding=(12, 0, 12, 12))
         output_frame.grid(row=1, column=0, sticky="nsew")
-        output_frame.rowconfigure(0, weight=1)
+        output_frame.rowconfigure(1, weight=1)
         output_frame.columnconfigure(0, weight=1)
 
+        peers_frame = ttk.LabelFrame(output_frame, text="Discovered peers", padding=8)
+        peers_frame.grid(row=0, column=0, sticky="nsew", pady=(0, 12))
+        peers_frame.columnconfigure(0, weight=1)
+        peers_frame.rowconfigure(0, weight=1)
+
+        self.peers_table = ttk.Treeview(
+            peers_frame,
+            columns=("hostname", "source_ip", "http_port", "ipv4_addresses"),
+            show="headings",
+            height=6,
+        )
+        self.peers_table.heading("hostname", text="Hostname")
+        self.peers_table.heading("source_ip", text="Source IP")
+        self.peers_table.heading("http_port", text="HTTP port")
+        self.peers_table.heading("ipv4_addresses", text="Reported IPv4")
+        self.peers_table.column("hostname", width=180, anchor="w")
+        self.peers_table.column("source_ip", width=140, anchor="w")
+        self.peers_table.column("http_port", width=90, anchor="center")
+        self.peers_table.column("ipv4_addresses", width=420, anchor="w")
+        self.peers_table.grid(row=0, column=0, sticky="nsew")
+        self.peers_table.bind("<Double-1>", self._on_peer_double_click)
+
+        peers_scrollbar = ttk.Scrollbar(peers_frame, orient="vertical", command=self.peers_table.yview)
+        peers_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.peers_table.configure(yscrollcommand=peers_scrollbar.set)
+
+        ttk.Label(
+            peers_frame,
+            text="Double-click a row or use 'Use selected peer' to copy the peer IP and HTTP port into the form.",
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
         self.output = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, font=("Consolas", 10))
-        self.output.grid(row=0, column=0, sticky="nsew")
+        self.output.grid(row=1, column=0, sticky="nsew")
 
     def _browse_save_path(self) -> None:
         path = filedialog.asksaveasfilename(
@@ -153,6 +192,73 @@ class NetDiagGui:
         self.current_report = None
         self.current_text_report = ""
         self.status_var.set("Output cleared.")
+
+    def _set_busy(self, busy: bool) -> None:
+        state = tk.DISABLED if busy else tk.NORMAL
+        self.run_button.config(state=state)
+        self.search_button.config(state=state)
+        self.use_selected_button.config(state=state)
+
+    def _refresh_peers_table(self, peers: list[dict[str, object]]) -> None:
+        self.discovered_peers = peers
+        for item_id in self.peers_table.get_children():
+            self.peers_table.delete(item_id)
+
+        for index, peer in enumerate(peers):
+            hostname = str(peer.get("hostname", "unknown"))
+            source_ip = str(peer.get("source_ip", ""))
+            http_port = str(peer.get("http_port", ""))
+            ipv4_addresses = peer.get("ipv4_addresses", [])
+            if isinstance(ipv4_addresses, list):
+                reported_ipv4 = ", ".join(str(value) for value in ipv4_addresses)
+            else:
+                reported_ipv4 = str(ipv4_addresses)
+            self.peers_table.insert(
+                "",
+                "end",
+                iid=f"peer-{index}",
+                values=(hostname, source_ip, http_port, reported_ipv4),
+            )
+
+    def _selected_peer(self) -> Optional[dict[str, object]]:
+        selection = self.peers_table.selection()
+        if not selection:
+            return None
+
+        selected_id = selection[0]
+        try:
+            index = int(selected_id.split("-", 1)[1])
+        except (IndexError, ValueError):
+            return None
+        if index < 0 or index >= len(self.discovered_peers):
+            return None
+        return self.discovered_peers[index]
+
+    def _apply_selected_peer(self) -> bool:
+        peer = self._selected_peer()
+        if not peer:
+            return False
+
+        source_ip = str(peer.get("source_ip", "")).strip()
+        hostname = str(peer.get("hostname", "")).strip()
+        peer_value = source_ip or hostname
+        if not peer_value:
+            return False
+
+        self.peer_var.set(peer_value)
+        http_port = peer.get("http_port")
+        if http_port is not None:
+            self.peer_port_var.set(str(http_port))
+
+        self.status_var.set(f"Selected peer {peer_value}")
+        return True
+
+    def _use_selected_peer(self) -> None:
+        if not self._apply_selected_peer():
+            messagebox.showinfo("NetDiagPeer", "Select a discovered peer first.")
+
+    def _on_peer_double_click(self, _event: object) -> None:
+        self._apply_selected_peer()
 
     def _collect_options(self) -> RuntimeOptions:
         try:
@@ -197,7 +303,7 @@ class NetDiagGui:
             messagebox.showerror("Invalid settings", str(exc))
             return
 
-        self.run_button.config(state=tk.DISABLED)
+        self._set_busy(True)
         self.status_var.set("Running diagnostics...")
         self._append_output("Running diagnostics...\n")
 
@@ -208,7 +314,32 @@ class NetDiagGui:
                 saved_path = None
                 if options.save_report:
                     saved_path = save_report_to_path(report, text_report, options.save_report, options.save_format)
-                self.queue.put(("success", (report, text_report, saved_path)))
+                self.queue.put(("diagnostics_success", (report, text_report, saved_path)))
+            except Exception as exc:
+                self.queue.put(("error", exc))
+
+        self.worker = threading.Thread(target=worker, daemon=True)
+        self.worker.start()
+
+    def _search_peers(self) -> None:
+        if self.worker and self.worker.is_alive():
+            messagebox.showinfo("NetDiagPeer", "Diagnostics or discovery is already running.")
+            return
+
+        try:
+            options = self._collect_options()
+        except ValueError as exc:
+            messagebox.showerror("Invalid settings", str(exc))
+            return
+
+        self._set_busy(True)
+        self.status_var.set("Searching for peers...")
+        self._append_output("Searching for peers...\n")
+
+        def worker() -> None:
+            try:
+                discovery_report = discover_only(options)
+                self.queue.put(("discovery_success", discovery_report))
             except Exception as exc:
                 self.queue.put(("error", exc))
 
@@ -219,19 +350,38 @@ class NetDiagGui:
         try:
             while True:
                 kind, payload = self.queue.get_nowait()
-                if kind == "success":
+                if kind == "diagnostics_success":
                     report, text_report, saved_path = payload
                     self.current_report = report
                     self.current_text_report = text_report
+                    self.current_discovery_report = None
+                    self._refresh_peers_table(report.discovered_peers)
                     self._append_output(text_report)
                     if saved_path:
                         self.status_var.set(f"Diagnostics complete. Saved to {saved_path}")
                     else:
                         self.status_var.set("Diagnostics complete.")
+                elif kind == "discovery_success":
+                    discovery_report = payload
+                    self.current_discovery_report = discovery_report
+                    self._refresh_peers_table(discovery_report.discovered_peers)
+                    self.current_report = None
+                    self.current_text_report = ""
+                    if discovery_report.discovered_peers:
+                        self._append_output(
+                            f"Discovered {len(discovery_report.discovered_peers)} peer(s).\n"
+                            "Double-click a row to use it for diagnostics.\n"
+                        )
+                        self.status_var.set(
+                            f"Found {len(discovery_report.discovered_peers)} peer(s). Double-click a row to select one."
+                        )
+                    else:
+                        self._append_output("No peers discovered for the current session.\n")
+                        self.status_var.set("No peers found for the current session.")
                 else:
                     self.status_var.set("Diagnostics failed.")
                     messagebox.showerror("Diagnostics failed", str(payload))
-                self.run_button.config(state=tk.NORMAL)
+                self._set_busy(False)
         except queue.Empty:
             pass
         finally:

@@ -80,6 +80,9 @@ python main.py --gui
 
 The GUI allows you to:
 
+- automatically discover peers on the current LAN session;
+- review discovered peers in a separate table;
+- double-click a discovered peer to copy its IP and HTTP port into the form;
 - enter the peer hostname or IP;
 - configure TCP and UDP ports;
 - enable Windows-specific diagnostics;
@@ -139,6 +142,16 @@ This adds:
 - `net view` - SMB resource enumeration
 - `nbtstat -A <ip>` - NetBIOS over TCP/IP by address
 - `nbtstat -a <hostname>` - NetBIOS over TCP/IP by hostname
+
+### GUI peer auto-discovery
+
+In the GUI, use:
+
+- `Search peers` - sends broadcast discovery requests and fills the `Discovered peers` table
+- double-click on a row - copies the discovered peer IP and HTTP port into the form
+- `Use selected peer` - does the same action from the current table selection
+
+This is useful when both computers are already running the tool with the same `Session` value and you do not want to type the peer IP manually.
 
 ## Example output
 

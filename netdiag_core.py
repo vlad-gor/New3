@@ -108,6 +108,16 @@ class DiagnosticReport:
     results: List[PeerProbeResult]
 
 
+@dataclass
+class DiscoveryReport:
+    app: str
+    version: str
+    generated_at: str
+    profile: LocalProfile
+    settings: RuntimeOptions
+    discovered_peers: List[Dict[str, object]]
+
+
 class ServerState:
     def __init__(self, profile: LocalProfile, http_port: int, session: str, instance_id: str) -> None:
         self.profile = profile
@@ -662,6 +672,34 @@ def choose_peer_targets(options: RuntimeOptions, discovered_peers: List[Dict[str
     return unique_targets
 
 
+def create_server_state(options: RuntimeOptions) -> tuple[LocalProfile, ServerState, threading.Event]:
+    profile = build_local_profile()
+    instance_id = secrets.token_hex(8)
+    state = ServerState(profile, options.port, options.session, instance_id)
+    return profile, state, threading.Event()
+
+
+def start_runtime_services(
+    state: ServerState,
+    stop_event: threading.Event,
+    discovery_port: int,
+) -> tuple[ThreadingHTTPServer, threading.Thread, DiscoveryResponder]:
+    try:
+        http_server, http_thread = start_http_server(state)
+    except OSError as exc:
+        raise RuntimeError(f"Не удалось открыть TCP-порт {state.http_port}: {exc}") from exc
+
+    responder = DiscoveryResponder(state, discovery_port, stop_event)
+    responder.start()
+    return http_server, http_thread, responder
+
+
+def stop_runtime_services(http_server: ThreadingHTTPServer, stop_event: threading.Event) -> None:
+    stop_event.set()
+    http_server.shutdown()
+    http_server.server_close()
+
+
 def probe_peer(
     target_host: str,
     target_port: int,
@@ -799,19 +837,28 @@ def probe_peer(
     )
 
 
-def run_diagnostics(options: RuntimeOptions) -> DiagnosticReport:
-    profile = build_local_profile()
-    instance_id = secrets.token_hex(8)
-    state = ServerState(profile, options.port, options.session, instance_id)
-    stop_event = threading.Event()
+def discover_only(options: RuntimeOptions) -> DiscoveryReport:
+    profile, state, stop_event = create_server_state(options)
+    http_server, _thread, _responder = start_runtime_services(state, stop_event, options.discovery_port)
 
     try:
-        http_server, _thread = start_http_server(state)
-    except OSError as exc:
-        raise RuntimeError(f"Не удалось открыть TCP-порт {options.port}: {exc}") from exc
+        time.sleep(max(0.0, options.startup_delay))
+        discovered_peers = discover_peers(state, options.discovery_port, options.discovery_timeout)
+        return DiscoveryReport(
+            app=APP_NAME,
+            version=APP_VERSION,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            profile=profile,
+            settings=options,
+            discovered_peers=discovered_peers,
+        )
+    finally:
+        stop_runtime_services(http_server, stop_event)
 
-    responder = DiscoveryResponder(state, options.discovery_port, stop_event)
-    responder.start()
+
+def run_diagnostics(options: RuntimeOptions) -> DiagnosticReport:
+    profile, state, stop_event = create_server_state(options)
+    http_server, _thread, _responder = start_runtime_services(state, stop_event, options.discovery_port)
 
     try:
         time.sleep(max(0.0, options.startup_delay))
@@ -832,9 +879,7 @@ def run_diagnostics(options: RuntimeOptions) -> DiagnosticReport:
             results=results,
         )
     finally:
-        stop_event.set()
-        http_server.shutdown()
-        http_server.server_close()
+        stop_runtime_services(http_server, stop_event)
 
 
 def report_to_dict(report: DiagnosticReport) -> Dict[str, object]:
