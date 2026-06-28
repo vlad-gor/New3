@@ -2,12 +2,16 @@
 
 ## Network diagnostic application
 
-This repository now contains a Python application for bidirectional network diagnostics between two computers.
+This repository contains a Python application for bidirectional network diagnostics between two computers.
 
 ### Files
 
-- `main.py` - entry point
-- `network_diagnostic.py` - full application
+- `main.py` - CLI entry point
+- `gui_main.py` - GUI entry point for Tkinter and Windows `.exe` packaging
+- `netdiag_core.py` - diagnostic engine shared by CLI and GUI
+- `netdiag_gui.py` - Tkinter interface
+- `network_diagnostic.py` - compatibility wrapper
+- `build_windows.bat` - build script for a Windows executable with PyInstaller
 - `rename_dirs.sh` - separate Bash utility from the previous task
 
 ## What the application checks
@@ -19,11 +23,17 @@ When launched on both computers, the application:
 3. can also connect directly to a peer by hostname or IP;
 4. checks direct HTTP/TCP connectivity to the peer;
 5. asks the peer to connect back and verifies reverse connectivity;
-6. reports likely issues such as:
+6. optionally runs Windows-oriented diagnostics:
+   - `ping`
+   - SMB TCP ports `445` and `139`
+   - `net view`
+   - `nbtstat -A` and `nbtstat -a`
+7. reports likely issues such as:
    - hostname does not resolve;
    - incoming connections are blocked by firewall;
    - peer is not visible via broadcast;
-   - the peer does not look like it is on the same LAN segment.
+   - the peer does not look like it is on the same LAN segment;
+   - SMB or NetBIOS does not respond.
 
 ## Requirements
 
@@ -56,6 +66,26 @@ On the second machine:
 python main.py --peer 192.168.1.10 --session office-test
 ```
 
+### Option 3: launch the GUI
+
+```bash
+python gui_main.py
+```
+
+or
+
+```bash
+python main.py --gui
+```
+
+The GUI allows you to:
+
+- enter the peer hostname or IP;
+- configure TCP and UDP ports;
+- enable Windows-specific diagnostics;
+- save the current report as `.txt` or `.json`;
+- run diagnostics without using the command line.
+
 ## Useful options
 
 ```bash
@@ -73,7 +103,42 @@ Main options:
 - `--startup-delay` - wait time before starting discovery and probing
 - `--linger` - keep the service alive briefly after the report
 - `--session` - logical session name to isolate diagnostics
+- `--windows-mode` - enable ping, SMB, `net view`, and NetBIOS checks
 - `--json` - machine-readable JSON output
+- `--save-report` - write the report to a file
+- `--save-format` - `auto`, `text`, or `json`
+- `--gui` - start the Tkinter interface
+
+### Save report to file
+
+Save a text report:
+
+```bash
+python main.py --peer 192.168.1.20 --session office-test --save-report report.txt
+```
+
+Save a JSON report:
+
+```bash
+python main.py --peer 192.168.1.20 --session office-test --windows-mode --save-report report.json
+```
+
+### Windows-oriented diagnostics
+
+Use this mode when diagnosing Windows 7 / Windows 10 sharing issues:
+
+```bash
+python main.py --peer PC-WIN7 --session office-test --windows-mode
+```
+
+This adds:
+
+- `Ping` - basic ICMP reachability
+- `SMB TCP 445` - direct SMB port check
+- `NetBIOS Session TCP 139` - legacy Windows file sharing path
+- `net view` - SMB resource enumeration
+- `nbtstat -A <ip>` - NetBIOS over TCP/IP by address
+- `nbtstat -a <hostname>` - NetBIOS over TCP/IP by hostname
 
 ## Example output
 
@@ -93,6 +158,10 @@ Discovered peers:
 Check #1: 192.168.1.20
   Direct HTTP: OK
   Reverse callback: FAIL
+  Windows/SMB checks:
+    - Ping: OK
+    - SMB TCP 445: OK
+    - net view: FAIL
   Findings:
     - Peer could not connect back to this computer. Incoming connections may be blocked.
 ```
@@ -108,6 +177,19 @@ Check #1: 192.168.1.20
   - the other computer received the request, but could not open a connection back;
   - this usually points to a local firewall or inbound filtering problem.
 
+- `SMB TCP 445: FAIL`
+  - SMB is blocked by firewall;
+  - File and Printer Sharing may be disabled;
+  - the Server service may not be available on the peer.
+
+- `net view: FAIL`
+  - Windows networking is partially broken even if IP reachability works;
+  - credentials, SMB configuration, or browser-related components may be involved.
+
+- `nbtstat: FAIL`
+  - NetBIOS over TCP/IP may be disabled;
+  - hostname resolution for older Windows discovery paths may be broken.
+
 - `hostname does not resolve`
   - test by IP first;
   - then investigate DNS, NetBIOS, or local name resolution.
@@ -116,3 +198,22 @@ Check #1: 192.168.1.20
   - computers may be in different subnets or VLANs;
   - broadcast may be filtered by the network;
   - manual `--peer` mode should still be used.
+
+## Build a Windows executable
+
+On a Windows machine with Python installed:
+
+```bat
+build_windows.bat
+```
+
+The script will:
+
+1. update `pip`;
+2. install the latest `PyInstaller`;
+3. build a windowed one-file executable;
+4. place the result at:
+
+```text
+dist\NetDiagPeer.exe
+```

@@ -1,4 +1,4 @@
-from network_diagnostic import main
+from netdiag_core import main
 
 
 if __name__ == "__main__":
