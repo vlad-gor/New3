@@ -2,22 +2,17 @@ from __future__ import annotations
 
 import platform
 import queue
+import subprocess
 import threading
 from typing import Dict, List, Optional
 
 from netdiag_core import (
-    DEFAULT_CONNECT_TIMEOUT,
-    DEFAULT_DISCOVERY_PORT,
-    DEFAULT_DISCOVERY_TIMEOUT,
     DEFAULT_HTTP_PORT,
-    DEFAULT_LINGER,
-    DEFAULT_STARTUP_DELAY,
     DEFAULT_SAVE_FORMAT,
     DiagnosticReport,
     DiscoveryReport,
     RuntimeOptions,
     discover_only,
-    render_text_report,
     run_diagnostics,
     save_report_to_path,
 )
@@ -40,28 +35,26 @@ class NetDiagGui:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("NetDiagPeer")
-        self.root.geometry("980x760")
+        self.root.geometry("860x620")
 
-        self.queue = queue.Queue()  # type: queue.Queue
-        self.worker: Optional[threading.Thread] = None
-        self.current_report: Optional[DiagnosticReport] = None
-        self.current_discovery_report: Optional[DiscoveryReport] = None
+        self.queue = queue.Queue()
+        self.worker = None  # type: Optional[threading.Thread]
+        self.current_report = None  # type: Optional[DiagnosticReport]
+        self.current_discovery_report = None  # type: Optional[DiscoveryReport]
         self.current_text_report = ""
         self.discovered_peers = []  # type: List[Dict[str, object]]
 
+        self.settings_window = None  # type: Optional[tk.Toplevel]
+        self.settings_peers_table = None
+        self.settings_status_var = tk.StringVar(value="")
+        self.search_button = None
+        self.use_selected_button = None
+
         self.peer_var = tk.StringVar()
-        self.port_var = tk.StringVar(value=str(DEFAULT_HTTP_PORT))
         self.peer_port_var = tk.StringVar()
-        self.discovery_port_var = tk.StringVar(value=str(DEFAULT_DISCOVERY_PORT))
-        self.discovery_timeout_var = tk.StringVar(value=str(DEFAULT_DISCOVERY_TIMEOUT))
-        self.connect_timeout_var = tk.StringVar(value=str(DEFAULT_CONNECT_TIMEOUT))
-        self.startup_delay_var = tk.StringVar(value=str(DEFAULT_STARTUP_DELAY))
-        self.linger_var = tk.StringVar(value=str(DEFAULT_LINGER))
         self.session_var = tk.StringVar(value="default")
         self.save_path_var = tk.StringVar()
-        self.save_format_var = tk.StringVar(value=DEFAULT_SAVE_FORMAT)
-        self.windows_mode_var = tk.BooleanVar(value=platform.system() == "Windows")
-        self.status_var = tk.StringVar(value="Ready.")
+        self.status_var = tk.StringVar(value="Готово к проверке.")
 
         self._build_layout()
         self.root.after(100, self._poll_queue)
@@ -70,158 +63,276 @@ class NetDiagGui:
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(1, weight=1)
 
-        top = ttk.Frame(self.root, padding=12)
-        top.grid(row=0, column=0, sticky="nsew")
-        top.columnconfigure(1, weight=1)
-        top.columnconfigure(3, weight=1)
+        style = ttk.Style()
+        style.configure("Primary.TButton", font=("Segoe UI", 12, "bold"))
 
-        fields = [
-            ("Peer hostname/IP", self.peer_var, 0, 0),
-            ("Session", self.session_var, 0, 2),
-            ("Local HTTP port", self.port_var, 1, 0),
-            ("Peer HTTP port", self.peer_port_var, 1, 2),
-            ("Discovery UDP port", self.discovery_port_var, 2, 0),
-            ("Discovery timeout", self.discovery_timeout_var, 2, 2),
-            ("Connect timeout", self.connect_timeout_var, 3, 0),
-            ("Startup delay", self.startup_delay_var, 3, 2),
-            ("Linger after report", self.linger_var, 4, 0),
-        ]
+        header = ttk.Frame(self.root, padding=16)
+        header.grid(row=0, column=0, sticky="ew")
+        header.columnconfigure(0, weight=1)
 
-        for label_text, variable, row, column in fields:
-            ttk.Label(top, text=label_text).grid(row=row, column=column, sticky="w", padx=(0, 8), pady=4)
-            ttk.Entry(top, textvariable=variable).grid(row=row, column=column + 1, sticky="ew", pady=4)
-
-        options_frame = ttk.Frame(top)
-        options_frame.grid(row=4, column=2, columnspan=2, sticky="w", pady=4)
-        ttk.Checkbutton(
-            options_frame,
-            text="Enable Windows diagnostics (ping / SMB / net view / NetBIOS)",
-            variable=self.windows_mode_var,
+        ttk.Label(
+            header,
+            text="Проверка сети между Windows 7 и Windows 10",
+            font=("Segoe UI", 16, "bold"),
         ).grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            header,
+            text=(
+                "Запустите программу на обоих компьютерах и нажмите кнопку ниже. "
+                "Если приложение найдет ошибки, они появятся в журнале."
+            ),
+            wraplength=780,
+            justify="left",
+        ).grid(row=1, column=0, sticky="w", pady=(8, 16))
 
-        save_frame = ttk.LabelFrame(top, text="Report saving", padding=8)
-        save_frame.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(12, 0))
+        button_frame = ttk.Frame(header)
+        button_frame.grid(row=2, column=0, sticky="ew")
+        button_frame.columnconfigure(3, weight=1)
+
+        self.run_button = ttk.Button(
+            button_frame,
+            text="Проверить подключение",
+            command=self._run_diagnostics,
+            style="Primary.TButton",
+        )
+        self.run_button.grid(row=0, column=0, padx=(0, 10))
+
+        self.settings_button = ttk.Button(
+            button_frame,
+            text="Дополнительные настройки",
+            command=self._open_settings_window,
+        )
+        self.settings_button.grid(row=0, column=1, padx=(0, 10))
+
+        self.save_button = ttk.Button(
+            button_frame,
+            text="Сохранить лог",
+            command=self._save_current_report,
+        )
+        self.save_button.grid(row=0, column=2)
+
+        ttk.Label(header, textvariable=self.status_var).grid(row=3, column=0, sticky="w", pady=(12, 0))
+
+        output_frame = ttk.Frame(self.root, padding=(16, 0, 16, 16))
+        output_frame.grid(row=1, column=0, sticky="nsew")
+        output_frame.columnconfigure(0, weight=1)
+        output_frame.rowconfigure(0, weight=1)
+
+        log_frame = ttk.LabelFrame(output_frame, text="Журнал ошибок и подсказок", padding=10)
+        log_frame.grid(row=0, column=0, sticky="nsew")
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(0, weight=1)
+
+        self.output = scrolledtext.ScrolledText(log_frame, wrap=tk.WORD, font=("Consolas", 10))
+        self.output.grid(row=0, column=0, sticky="nsew")
+        self.output.insert(
+            tk.END,
+            "1. Запустите программу на двух компьютерах.\n"
+            "2. Нажмите «Проверить подключение».\n"
+            "3. Если возникнут проблемы, они появятся здесь.\n",
+        )
+        self.output.configure(state=tk.DISABLED)
+
+    def _open_settings_window(self) -> None:
+        if self.settings_window and self.settings_window.winfo_exists():
+            self.settings_window.focus_set()
+            return
+
+        self.settings_window = tk.Toplevel(self.root)
+        self.settings_window.title("Дополнительные настройки")
+        self.settings_window.geometry("860x620")
+        self.settings_window.transient(self.root)
+        self.settings_window.protocol("WM_DELETE_WINDOW", self._close_settings_window)
+        self.settings_window.columnconfigure(0, weight=1)
+        self.settings_window.rowconfigure(2, weight=1)
+
+        header = ttk.Frame(self.settings_window, padding=12)
+        header.grid(row=0, column=0, sticky="ew")
+        header.columnconfigure(1, weight=1)
+
+        ttk.Label(
+            header,
+            text="Здесь можно вручную указать второй компьютер или открыть сетевые настройки Windows.",
+            wraplength=780,
+            justify="left",
+        ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
+
+        ttk.Label(header, text="IP или имя второго компьютера").grid(row=1, column=0, sticky="w", padx=(0, 8))
+        ttk.Entry(header, textvariable=self.peer_var).grid(row=1, column=1, sticky="ew")
+        ttk.Button(header, text="Очистить", command=lambda: self.peer_var.set("")).grid(row=1, column=2, padx=(8, 0))
+
+        save_frame = ttk.LabelFrame(self.settings_window, text="Сохранение лога", padding=12)
+        save_frame.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 12))
         save_frame.columnconfigure(1, weight=1)
 
-        ttk.Label(save_frame, text="Path").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
-        ttk.Entry(save_frame, textvariable=self.save_path_var).grid(row=0, column=1, sticky="ew", pady=4)
-        ttk.Button(save_frame, text="Browse...", command=self._browse_save_path).grid(row=0, column=2, padx=(8, 0), pady=4)
+        ttk.Label(save_frame, text="Файл для сохранения").grid(row=0, column=0, sticky="w", padx=(0, 8))
+        ttk.Entry(save_frame, textvariable=self.save_path_var).grid(row=0, column=1, sticky="ew")
+        ttk.Button(save_frame, text="Обзор...", command=self._browse_save_path).grid(row=0, column=2, padx=(8, 0))
 
-        ttk.Label(save_frame, text="Format").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
-        ttk.Combobox(
-            save_frame,
-            textvariable=self.save_format_var,
-            values=("auto", "text", "json"),
-            state="readonly",
-            width=12,
-        ).grid(row=1, column=1, sticky="w", pady=4)
+        body = ttk.Frame(self.settings_window, padding=(12, 0, 12, 12))
+        body.grid(row=2, column=0, sticky="nsew")
+        body.columnconfigure(0, weight=1)
+        body.columnconfigure(1, weight=1)
+        body.rowconfigure(0, weight=1)
 
-        button_frame = ttk.Frame(top)
-        button_frame.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(12, 0))
-        button_frame.columnconfigure(5, weight=1)
-
-        self.search_button = ttk.Button(button_frame, text="Search peers", command=self._search_peers)
-        self.search_button.grid(row=0, column=0, padx=(0, 8))
-        self.run_button = ttk.Button(button_frame, text="Run diagnostics", command=self._run_diagnostics)
-        self.run_button.grid(row=0, column=1, padx=(0, 8))
-        self.use_selected_button = ttk.Button(button_frame, text="Use selected peer", command=self._use_selected_peer)
-        self.use_selected_button.grid(row=0, column=2, padx=(0, 8))
-        ttk.Button(button_frame, text="Save current report", command=self._save_current_report).grid(row=0, column=3, padx=(0, 8))
-        ttk.Button(button_frame, text="Clear output", command=self._clear_output).grid(row=0, column=4, padx=(0, 8))
-        ttk.Label(button_frame, textvariable=self.status_var).grid(row=0, column=5, sticky="e")
-
-        output_frame = ttk.Frame(self.root, padding=(12, 0, 12, 12))
-        output_frame.grid(row=1, column=0, sticky="nsew")
-        output_frame.rowconfigure(1, weight=1)
-        output_frame.columnconfigure(0, weight=1)
-
-        peers_frame = ttk.LabelFrame(output_frame, text="Discovered peers", padding=8)
-        peers_frame.grid(row=0, column=0, sticky="nsew", pady=(0, 12))
+        peers_frame = ttk.LabelFrame(body, text="Найденные компьютеры", padding=10)
+        peers_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
         peers_frame.columnconfigure(0, weight=1)
-        peers_frame.rowconfigure(0, weight=1)
-
-        self.peers_table = ttk.Treeview(
-            peers_frame,
-            columns=("hostname", "source_ip", "http_port", "ipv4_addresses"),
-            show="headings",
-            height=6,
-        )
-        self.peers_table.heading("hostname", text="Hostname")
-        self.peers_table.heading("source_ip", text="Source IP")
-        self.peers_table.heading("http_port", text="HTTP port")
-        self.peers_table.heading("ipv4_addresses", text="Reported IPv4")
-        self.peers_table.column("hostname", width=180, anchor="w")
-        self.peers_table.column("source_ip", width=140, anchor="w")
-        self.peers_table.column("http_port", width=90, anchor="center")
-        self.peers_table.column("ipv4_addresses", width=420, anchor="w")
-        self.peers_table.grid(row=0, column=0, sticky="nsew")
-        self.peers_table.bind("<Double-1>", self._on_peer_double_click)
-
-        peers_scrollbar = ttk.Scrollbar(peers_frame, orient="vertical", command=self.peers_table.yview)
-        peers_scrollbar.grid(row=0, column=1, sticky="ns")
-        self.peers_table.configure(yscrollcommand=peers_scrollbar.set)
+        peers_frame.rowconfigure(1, weight=1)
 
         ttk.Label(
             peers_frame,
-            text="Double-click a row or use 'Use selected peer' to copy the peer IP and HTTP port into the form.",
-        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
+            text="Если адрес второго ПК неизвестен, нажмите «Найти компьютеры».",
+            wraplength=360,
+            justify="left",
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
-        self.output = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, font=("Consolas", 10))
-        self.output.grid(row=1, column=0, sticky="nsew")
+        self.settings_peers_table = ttk.Treeview(
+            peers_frame,
+            columns=("hostname", "source_ip", "http_port"),
+            show="headings",
+            height=10,
+        )
+        self.settings_peers_table.heading("hostname", text="Компьютер")
+        self.settings_peers_table.heading("source_ip", text="IP")
+        self.settings_peers_table.heading("http_port", text="Порт")
+        self.settings_peers_table.column("hostname", width=160, anchor="w")
+        self.settings_peers_table.column("source_ip", width=130, anchor="w")
+        self.settings_peers_table.column("http_port", width=70, anchor="center")
+        self.settings_peers_table.grid(row=1, column=0, sticky="nsew")
+        self.settings_peers_table.bind("<Double-1>", self._on_peer_double_click)
+
+        peers_scrollbar = ttk.Scrollbar(peers_frame, orient="vertical", command=self.settings_peers_table.yview)
+        peers_scrollbar.grid(row=1, column=1, sticky="ns")
+        self.settings_peers_table.configure(yscrollcommand=peers_scrollbar.set)
+
+        peer_buttons = ttk.Frame(peers_frame)
+        peer_buttons.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        self.search_button = ttk.Button(peer_buttons, text="Найти компьютеры", command=self._search_peers)
+        self.search_button.grid(row=0, column=0, padx=(0, 8))
+        self.use_selected_button = ttk.Button(
+            peer_buttons,
+            text="Использовать выбранный",
+            command=self._use_selected_peer,
+        )
+        self.use_selected_button.grid(row=0, column=1)
+        ttk.Label(peers_frame, textvariable=self.settings_status_var).grid(
+            row=3,
+            column=0,
+            columnspan=2,
+            sticky="w",
+            pady=(8, 0),
+        )
+
+        actions_frame = ttk.LabelFrame(body, text="Изменение сетевых настроек Windows", padding=10)
+        actions_frame.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
+        actions_frame.columnconfigure(0, weight=1)
+        actions_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(
+            actions_frame,
+            text=(
+                "Эти кнопки помогут открыть стандартные окна Windows или включить "
+                "сетевое обнаружение и общий доступ."
+            ),
+            wraplength=360,
+            justify="left",
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
+
+        actions = [
+            ("Открыть центр управления сетями", self._open_network_center),
+            ("Открыть сетевые адаптеры", self._open_network_adapters),
+            ("Включить сетевое обнаружение", self._enable_network_discovery),
+            ("Включить общий доступ к файлам", self._enable_file_sharing),
+            ("Открыть брандмауэр", self._open_firewall),
+            ("Открыть службы", self._open_services),
+        ]
+        for index, (title, callback) in enumerate(actions, start=1):
+            row = ((index - 1) // 2) + 1
+            column = (index - 1) % 2
+            ttk.Button(actions_frame, text=title, command=callback).grid(
+                row=row,
+                column=column,
+                sticky="ew",
+                padx=(0 if column == 0 else 6, 6 if column == 0 else 0),
+                pady=6,
+            )
+
+        self._refresh_peers_table(self.discovered_peers)
+        self._set_busy(self.worker is not None and self.worker.is_alive())
+
+    def _close_settings_window(self) -> None:
+        if self.settings_window and self.settings_window.winfo_exists():
+            self.settings_window.destroy()
+        self.settings_window = None
+        self.settings_peers_table = None
+        self.settings_status_var.set("")
 
     def _browse_save_path(self) -> None:
         path = filedialog.asksaveasfilename(
-            title="Save diagnostic report",
+            title="Сохранить лог проверки",
             defaultextension=".txt",
-            filetypes=(
-                ("Text report", "*.txt"),
-                ("JSON report", "*.json"),
-                ("All files", "*.*"),
-            ),
+            filetypes=(("Text report", "*.txt"), ("JSON report", "*.json"), ("All files", "*.*")),
         )
         if path:
             self.save_path_var.set(path)
 
-    def _append_output(self, text: str) -> None:
+    def _set_output_text(self, text: str) -> None:
+        self.output.configure(state=tk.NORMAL)
         self.output.delete("1.0", tk.END)
         self.output.insert(tk.END, text)
         self.output.see(tk.END)
+        self.output.configure(state=tk.DISABLED)
+
+    def _append_log_line(self, text: str) -> None:
+        self.output.configure(state=tk.NORMAL)
+        if self.output.get("1.0", tk.END).strip():
+            self.output.insert(tk.END, "\n")
+        self.output.insert(tk.END, text)
+        self.output.see(tk.END)
+        self.output.configure(state=tk.DISABLED)
 
     def _clear_output(self) -> None:
-        self.output.delete("1.0", tk.END)
         self.current_report = None
         self.current_text_report = ""
-        self.status_var.set("Output cleared.")
+        self._set_output_text("")
+        self.status_var.set("Журнал очищен.")
 
     def _set_busy(self, busy: bool) -> None:
         state = tk.DISABLED if busy else tk.NORMAL
         self.run_button.config(state=state)
-        self.search_button.config(state=state)
-        self.use_selected_button.config(state=state)
+        self.settings_button.config(state=state)
+        self.save_button.config(state=state)
+        if self.search_button is not None:
+            self.search_button.config(state=state)
+        if self.use_selected_button is not None:
+            self.use_selected_button.config(state=state)
 
     def _refresh_peers_table(self, peers: List[Dict[str, object]]) -> None:
         self.discovered_peers = peers
-        for item_id in self.peers_table.get_children():
-            self.peers_table.delete(item_id)
+        if not self.settings_peers_table:
+            return
+
+        for item_id in self.settings_peers_table.get_children():
+            self.settings_peers_table.delete(item_id)
 
         for index, peer in enumerate(peers):
-            hostname = str(peer.get("hostname", "unknown"))
-            source_ip = str(peer.get("source_ip", ""))
-            http_port = str(peer.get("http_port", ""))
-            ipv4_addresses = peer.get("ipv4_addresses", [])
-            if isinstance(ipv4_addresses, list):
-                reported_ipv4 = ", ".join(str(value) for value in ipv4_addresses)
-            else:
-                reported_ipv4 = str(ipv4_addresses)
-            self.peers_table.insert(
+            self.settings_peers_table.insert(
                 "",
                 "end",
-                iid=f"peer-{index}",
-                values=(hostname, source_ip, http_port, reported_ipv4),
+                iid="peer-{0}".format(index),
+                values=(
+                    str(peer.get("hostname", "unknown")),
+                    str(peer.get("source_ip", "")),
+                    str(peer.get("http_port", "")),
+                ),
             )
 
     def _selected_peer(self) -> Optional[Dict[str, object]]:
-        selection = self.peers_table.selection()
+        if not self.settings_peers_table:
+            return None
+
+        selection = self.settings_peers_table.selection()
         if not selection:
             return None
 
@@ -230,6 +341,7 @@ class NetDiagGui:
             index = int(selected_id.split("-", 1)[1])
         except (IndexError, ValueError):
             return None
+
         if index < 0 or index >= len(self.discovered_peers):
             return None
         return self.discovered_peers[index]
@@ -241,76 +353,123 @@ class NetDiagGui:
 
         source_ip = str(peer.get("source_ip", "")).strip()
         hostname = str(peer.get("hostname", "")).strip()
-        peer_value = source_ip or hostname
-        if not peer_value:
-            return False
-
-        self.peer_var.set(peer_value)
+        self.peer_var.set(source_ip or hostname)
         http_port = peer.get("http_port")
-        if http_port is not None:
-            self.peer_port_var.set(str(http_port))
-
-        self.status_var.set(f"Selected peer {peer_value}")
+        self.peer_port_var.set(str(http_port) if http_port is not None else "")
+        self.status_var.set("Выбран второй компьютер: {0}".format(self.peer_var.get()))
+        self.settings_status_var.set("Выбран компьютер: {0}".format(self.peer_var.get()))
         return True
 
     def _use_selected_peer(self) -> None:
         if not self._apply_selected_peer():
-            messagebox.showinfo("NetDiagPeer", "Select a discovered peer first.")
+            messagebox.showinfo("NetDiagPeer", "Сначала выберите компьютер из списка.")
 
     def _on_peer_double_click(self, _event: object) -> None:
         self._apply_selected_peer()
 
     def _collect_options(self) -> RuntimeOptions:
-        try:
-            port = int(self.port_var.get().strip())
-            discovery_port = int(self.discovery_port_var.get().strip())
-            discovery_timeout = float(self.discovery_timeout_var.get().strip())
-            connect_timeout = float(self.connect_timeout_var.get().strip())
-            startup_delay = float(self.startup_delay_var.get().strip())
-            linger = float(self.linger_var.get().strip())
-        except ValueError as exc:
-            raise ValueError("Ports must be integers and timeout values must be numeric.") from exc
-
         peer_text = self.peer_var.get().strip() or None
         peer_port_text = self.peer_port_var.get().strip()
         peer_port = int(peer_port_text) if peer_port_text else None
-        session = self.session_var.get().strip() or "default"
         save_path = self.save_path_var.get().strip() or None
 
         return RuntimeOptions(
             peer=peer_text,
-            port=port,
+            port=DEFAULT_HTTP_PORT,
             peer_port=peer_port,
-            discovery_port=discovery_port,
-            discovery_timeout=discovery_timeout,
-            connect_timeout=connect_timeout,
-            startup_delay=startup_delay,
-            linger=linger,
-            session=session,
+            discovery_port=DEFAULT_HTTP_PORT + 1,
+            discovery_timeout=5.0,
+            connect_timeout=3.0,
+            startup_delay=2.0,
+            linger=2.0,
+            session=self.session_var.get().strip() or "default",
             save_report=save_path,
-            save_format=self.save_format_var.get().strip() or DEFAULT_SAVE_FORMAT,
-            windows_mode=self.windows_mode_var.get(),
+            save_format=DEFAULT_SAVE_FORMAT,
+            windows_mode=True,
         )
+
+    def _format_gui_report(self, report: DiagnosticReport) -> str:
+        lines = []  # type: List[str]
+        problems = []  # type: List[str]
+
+        if not report.results:
+            lines.append("Ошибка: не удалось проверить второй компьютер.")
+            if report.settings.peer:
+                lines.append("- Проверьте правильность IP или имени второго компьютера: {0}".format(report.settings.peer))
+                lines.append("- Убедитесь, что на втором компьютере тоже запущено это приложение.")
+            else:
+                lines.append("- Второй компьютер не найден автоматически.")
+                lines.append("- Запустите программу на втором компьютере и нажмите «Проверить подключение».")
+                lines.append("- Если не помогает, откройте «Дополнительные настройки» и укажите IP вручную.")
+            if not report.discovered_peers:
+                lines.append("- Возможно, сетевое обнаружение отключено или брандмауэр блокирует доступ.")
+            return "\n".join(lines)
+
+        for result in report.results:
+            peer_name = result.peer_host
+            if result.remote_profile and result.remote_profile.get("hostname"):
+                peer_name = str(result.remote_profile.get("hostname"))
+
+            peer_problems = []  # type: List[str]
+            if not result.http_ok:
+                peer_problems.append("нет прямого подключения к {0}".format(peer_name))
+            if not result.reverse_ok:
+                peer_problems.append("второй компьютер {0} не может подключиться обратно".format(peer_name))
+            if result.local_name_resolution_ok is False:
+                peer_problems.append("имя этого компьютера не разрешается на втором ПК")
+
+            for warning in result.warnings:
+                if warning not in peer_problems:
+                    peer_problems.append(warning)
+
+            for check in result.windows_checks:
+                if check.skipped or check.ok:
+                    continue
+                mapped_message = self._map_windows_check_to_message(check.name)
+                if mapped_message not in peer_problems:
+                    peer_problems.append(mapped_message)
+
+            if peer_problems:
+                problems.append("[{0}]".format(peer_name))
+                for item in peer_problems:
+                    problems.append("- {0}".format(item))
+
+        if problems:
+            lines.append("Найдены проблемы с подключением:")
+            lines.extend(problems)
+            lines.append("")
+            lines.append("Попробуйте открыть «Дополнительные настройки» и включить сетевое обнаружение и общий доступ.")
+        else:
+            lines.append("Ошибок не найдено.")
+            lines.append("Подключение между компьютерами выглядит рабочим.")
+
+        return "\n".join(lines)
+
+    def _map_windows_check_to_message(self, check_name: str) -> str:
+        mapping = {
+            "Ping": "команда Ping не проходит",
+            "SMB TCP 445": "порт 445 (SMB) недоступен",
+            "NetBIOS Session TCP 139": "порт 139 (NetBIOS) недоступен",
+            "net view": "Windows не смог получить сетевые общие ресурсы",
+            "nbtstat -A": "NetBIOS по IP не отвечает",
+            "nbtstat -a": "NetBIOS по имени не отвечает",
+        }
+        return mapping.get(check_name, "{0}: ошибка".format(check_name))
 
     def _run_diagnostics(self) -> None:
         if self.worker and self.worker.is_alive():
-            messagebox.showinfo("NetDiagPeer", "Diagnostics are already running.")
+            messagebox.showinfo("NetDiagPeer", "Проверка уже выполняется.")
             return
 
-        try:
-            options = self._collect_options()
-        except ValueError as exc:
-            messagebox.showerror("Invalid settings", str(exc))
-            return
-
+        options = self._collect_options()
         self._set_busy(True)
-        self.status_var.set("Running diagnostics...")
-        self._append_output("Running diagnostics...\n")
+        self.status_var.set("Идет проверка подключения...")
+        self._set_output_text("Идет проверка подключения...\nПодождите несколько секунд.")
 
         def worker() -> None:
             try:
                 report = run_diagnostics(options)
-                text_report = render_text_report(report)
+                text_report = self._format_gui_report(report)
                 saved_path = None
                 if options.save_report:
                     saved_path = save_report_to_path(report, text_report, options.save_report, options.save_format)
@@ -323,18 +482,13 @@ class NetDiagGui:
 
     def _search_peers(self) -> None:
         if self.worker and self.worker.is_alive():
-            messagebox.showinfo("NetDiagPeer", "Diagnostics or discovery is already running.")
+            messagebox.showinfo("NetDiagPeer", "Сейчас уже выполняется проверка или поиск.")
             return
 
-        try:
-            options = self._collect_options()
-        except ValueError as exc:
-            messagebox.showerror("Invalid settings", str(exc))
-            return
-
+        options = self._collect_options()
         self._set_busy(True)
-        self.status_var.set("Searching for peers...")
-        self._append_output("Searching for peers...\n")
+        self.status_var.set("Поиск компьютеров...")
+        self.settings_status_var.set("Поиск компьютеров...")
 
         def worker() -> None:
             try:
@@ -356,31 +510,28 @@ class NetDiagGui:
                     self.current_text_report = text_report
                     self.current_discovery_report = None
                     self._refresh_peers_table(report.discovered_peers)
-                    self._append_output(text_report)
+                    self._set_output_text(text_report)
                     if saved_path:
-                        self.status_var.set(f"Diagnostics complete. Saved to {saved_path}")
+                        self.status_var.set("Проверка завершена. Лог сохранен в {0}".format(saved_path))
                     else:
-                        self.status_var.set("Diagnostics complete.")
+                        self.status_var.set("Проверка завершена.")
                 elif kind == "discovery_success":
                     discovery_report = payload
                     self.current_discovery_report = discovery_report
                     self._refresh_peers_table(discovery_report.discovered_peers)
-                    self.current_report = None
-                    self.current_text_report = ""
                     if discovery_report.discovered_peers:
-                        self._append_output(
-                            f"Discovered {len(discovery_report.discovered_peers)} peer(s).\n"
-                            "Double-click a row to use it for diagnostics.\n"
+                        self.settings_status_var.set(
+                            "Найдено компьютеров: {0}. Выберите нужный компьютер из списка.".format(
+                                len(discovery_report.discovered_peers)
+                            )
                         )
-                        self.status_var.set(
-                            f"Found {len(discovery_report.discovered_peers)} peer(s). Double-click a row to select one."
-                        )
+                        self.status_var.set("Поиск завершен. Компьютеры найдены.")
                     else:
-                        self._append_output("No peers discovered for the current session.\n")
-                        self.status_var.set("No peers found for the current session.")
+                        self.settings_status_var.set("Компьютеры не найдены.")
+                        self.status_var.set("Поиск завершен. Компьютеры не найдены.")
                 else:
-                    self.status_var.set("Diagnostics failed.")
-                    messagebox.showerror("Diagnostics failed", str(payload))
+                    self.status_var.set("Проверка завершилась ошибкой.")
+                    messagebox.showerror("NetDiagPeer", str(payload))
                 self._set_busy(False)
         except queue.Empty:
             pass
@@ -389,7 +540,7 @@ class NetDiagGui:
 
     def _save_current_report(self) -> None:
         if not self.current_report or not self.current_text_report:
-            messagebox.showinfo("NetDiagPeer", "No report is available yet.")
+            messagebox.showinfo("NetDiagPeer", "Сначала выполните проверку подключения.")
             return
 
         path = self.save_path_var.get().strip()
@@ -404,14 +555,99 @@ class NetDiagGui:
                 self.current_report,
                 self.current_text_report,
                 path,
-                self.save_format_var.get().strip() or DEFAULT_SAVE_FORMAT,
+                DEFAULT_SAVE_FORMAT,
             )
         except Exception as exc:
-            messagebox.showerror("Save failed", str(exc))
+            messagebox.showerror("NetDiagPeer", str(exc))
             return
 
-        self.status_var.set(f"Report saved to {saved_path}")
-        messagebox.showinfo("NetDiagPeer", f"Report saved to:\n{saved_path}")
+        self.status_var.set("Лог сохранен в {0}".format(saved_path))
+        messagebox.showinfo("NetDiagPeer", "Лог сохранен:\n{0}".format(saved_path))
+
+    def _ensure_windows(self) -> bool:
+        if platform.system() == "Windows":
+            return True
+        messagebox.showinfo("NetDiagPeer", "Эта кнопка работает только на Windows.")
+        return False
+
+    def _launch_windows_target(self, command: str, success_message: str) -> None:
+        if not self._ensure_windows():
+            return
+        try:
+            subprocess.Popen(command, shell=True)
+        except OSError as exc:
+            messagebox.showerror("NetDiagPeer", str(exc))
+            return
+        self.status_var.set(success_message)
+        self._append_log_line(success_message)
+
+    def _run_windows_command(self, command: List[str], success_message: str, failure_message: str) -> None:
+        if not self._ensure_windows():
+            return
+
+        try:
+            completed = subprocess.run(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                check=False,
+                timeout=15,
+            )
+        except OSError as exc:
+            messagebox.showerror("NetDiagPeer", str(exc))
+            return
+
+        if completed.returncode == 0:
+            self.status_var.set(success_message)
+            self._append_log_line(success_message)
+            return
+
+        output = completed.stdout.strip()
+        details = failure_message
+        if output:
+            details = "{0}\n{1}".format(failure_message, output)
+        self.status_var.set("Команда Windows завершилась с ошибкой.")
+        self._append_log_line(details)
+        messagebox.showwarning("NetDiagPeer", details)
+
+    def _open_network_center(self) -> None:
+        self._launch_windows_target(
+            'control.exe /name Microsoft.NetworkAndSharingCenter',
+            "Открыт центр управления сетями и общим доступом.",
+        )
+
+    def _open_network_adapters(self) -> None:
+        self._launch_windows_target(
+            "control.exe ncpa.cpl",
+            "Открыт список сетевых адаптеров.",
+        )
+
+    def _open_firewall(self) -> None:
+        self._launch_windows_target(
+            'control.exe /name Microsoft.WindowsFirewall',
+            "Открыт брандмауэр Windows.",
+        )
+
+    def _open_services(self) -> None:
+        self._launch_windows_target(
+            "services.msc",
+            "Открыт список служб Windows.",
+        )
+
+    def _enable_network_discovery(self) -> None:
+        self._run_windows_command(
+            ["netsh", "advfirewall", "firewall", "set", "rule", 'group="Network Discovery"', "new", "enable=Yes"],
+            "Сетевое обнаружение включено или уже было включено.",
+            "Не удалось включить сетевое обнаружение. Возможно, нужны права администратора.",
+        )
+
+    def _enable_file_sharing(self) -> None:
+        self._run_windows_command(
+            ["netsh", "advfirewall", "firewall", "set", "rule", 'group="File and Printer Sharing"', "new", "enable=Yes"],
+            "Общий доступ к файлам и принтерам включен или уже был включен.",
+            "Не удалось включить общий доступ к файлам и принтерам. Возможно, нужны права администратора.",
+        )
 
 
 def launch_gui() -> int:

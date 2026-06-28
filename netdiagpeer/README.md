@@ -87,14 +87,10 @@ python netdiagpeer/main.py --gui
 
 The GUI allows you to:
 
-- automatically discover peers on the current LAN session;
-- review discovered peers in a separate table;
-- double-click a discovered peer to copy its IP and HTTP port into the form;
-- enter the peer hostname or IP;
-- configure TCP and UDP ports;
-- enable Windows-specific diagnostics;
-- save the current report as `.txt` or `.json`;
-- run diagnostics without using the command line.
+- use one main button: `Проверить подключение`;
+- see only errors and setup hints in the log window;
+- open `Дополнительные настройки` for manual peer selection or saving the log;
+- use built-in Windows helper buttons for network setup.
 
 ## Useful options
 
@@ -152,13 +148,19 @@ This adds:
 
 ### GUI peer auto-discovery
 
-In the GUI, use:
+The main window is intentionally simplified for beginner users:
 
-- `Search peers` - sends broadcast discovery requests and fills the `Discovered peers` table
-- double-click on a row - copies the discovered peer IP and HTTP port into the form
-- `Use selected peer` - does the same action from the current table selection
+- press `Проверить подключение` on both computers;
+- read only the errors and hints in the main log area;
+- if automatic detection is not enough, open `Дополнительные настройки`.
 
-This is useful when both computers are already running the tool with the same `Session` value and you do not want to type the peer IP manually.
+Inside `Дополнительные настройки`, you can:
+
+- search for computers in the local network;
+- choose a discovered computer from the table;
+- manually enter the second computer IP or hostname;
+- save the log to a file;
+- open Windows network settings and try enabling network discovery and file sharing.
 
 ## Example output
 
