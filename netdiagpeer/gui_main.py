@@ -1,4 +1,7 @@
-from netdiag_gui import launch_gui
+try:
+    from .netdiag_gui import launch_gui
+except ImportError:
+    from netdiag_gui import launch_gui
 
 
 if __name__ == "__main__":

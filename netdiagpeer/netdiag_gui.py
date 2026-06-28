@@ -6,16 +6,28 @@ import subprocess
 import threading
 from typing import Dict, List, Optional
 
-from netdiag_core import (
-    DEFAULT_HTTP_PORT,
-    DEFAULT_SAVE_FORMAT,
-    DiagnosticReport,
-    DiscoveryReport,
-    RuntimeOptions,
-    discover_only,
-    run_diagnostics,
-    save_report_to_path,
-)
+try:
+    from .netdiag_core import (
+        DEFAULT_HTTP_PORT,
+        DEFAULT_SAVE_FORMAT,
+        DiagnosticReport,
+        DiscoveryReport,
+        RuntimeOptions,
+        discover_only,
+        run_diagnostics,
+        save_report_to_path,
+    )
+except ImportError:
+    from netdiag_core import (
+        DEFAULT_HTTP_PORT,
+        DEFAULT_SAVE_FORMAT,
+        DiagnosticReport,
+        DiscoveryReport,
+        RuntimeOptions,
+        discover_only,
+        run_diagnostics,
+        save_report_to_path,
+    )
 
 try:
     import tkinter as tk
