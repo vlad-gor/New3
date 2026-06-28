@@ -46,7 +46,7 @@ except ModuleNotFoundError as exc:
 class NetDiagGui:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("NetDiagPeer")
+        self.root.title("Проверка сети")
         self.root.geometry("860x620")
 
         self.queue = queue.Queue()
@@ -284,7 +284,7 @@ class NetDiagGui:
         path = filedialog.asksaveasfilename(
             title="Сохранить лог проверки",
             defaultextension=".txt",
-            filetypes=(("Text report", "*.txt"), ("JSON report", "*.json"), ("All files", "*.*")),
+            filetypes=(("Текстовый лог", "*.txt"), ("JSON лог", "*.json"), ("Все файлы", "*.*")),
         )
         if path:
             self.save_path_var.set(path)
@@ -374,7 +374,7 @@ class NetDiagGui:
 
     def _use_selected_peer(self) -> None:
         if not self._apply_selected_peer():
-            messagebox.showinfo("NetDiagPeer", "Сначала выберите компьютер из списка.")
+            messagebox.showinfo("Проверка сети", "Сначала выберите компьютер из списка.")
 
     def _on_peer_double_click(self, _event: object) -> None:
         self._apply_selected_peer()
@@ -470,7 +470,7 @@ class NetDiagGui:
 
     def _run_diagnostics(self) -> None:
         if self.worker and self.worker.is_alive():
-            messagebox.showinfo("NetDiagPeer", "Проверка уже выполняется.")
+            messagebox.showinfo("Проверка сети", "Проверка уже выполняется.")
             return
 
         options = self._collect_options()
@@ -494,7 +494,7 @@ class NetDiagGui:
 
     def _search_peers(self) -> None:
         if self.worker and self.worker.is_alive():
-            messagebox.showinfo("NetDiagPeer", "Сейчас уже выполняется проверка или поиск.")
+            messagebox.showinfo("Проверка сети", "Сейчас уже выполняется проверка или поиск.")
             return
 
         options = self._collect_options()
@@ -543,7 +543,7 @@ class NetDiagGui:
                         self.status_var.set("Поиск завершен. Компьютеры не найдены.")
                 else:
                     self.status_var.set("Проверка завершилась ошибкой.")
-                    messagebox.showerror("NetDiagPeer", str(payload))
+                    messagebox.showerror("Проверка сети", str(payload))
                 self._set_busy(False)
         except queue.Empty:
             pass
@@ -552,7 +552,7 @@ class NetDiagGui:
 
     def _save_current_report(self) -> None:
         if not self.current_report or not self.current_text_report:
-            messagebox.showinfo("NetDiagPeer", "Сначала выполните проверку подключения.")
+            messagebox.showinfo("Проверка сети", "Сначала выполните проверку подключения.")
             return
 
         path = self.save_path_var.get().strip()
@@ -570,16 +570,16 @@ class NetDiagGui:
                 DEFAULT_SAVE_FORMAT,
             )
         except Exception as exc:
-            messagebox.showerror("NetDiagPeer", str(exc))
+            messagebox.showerror("Проверка сети", str(exc))
             return
 
         self.status_var.set("Лог сохранен в {0}".format(saved_path))
-        messagebox.showinfo("NetDiagPeer", "Лог сохранен:\n{0}".format(saved_path))
+        messagebox.showinfo("Проверка сети", "Лог сохранен:\n{0}".format(saved_path))
 
     def _ensure_windows(self) -> bool:
         if platform.system() == "Windows":
             return True
-        messagebox.showinfo("NetDiagPeer", "Эта кнопка работает только на Windows.")
+        messagebox.showinfo("Проверка сети", "Эта кнопка работает только на Windows.")
         return False
 
     def _launch_windows_target(self, command: str, success_message: str) -> None:
@@ -588,7 +588,7 @@ class NetDiagGui:
         try:
             subprocess.Popen(command, shell=True)
         except OSError as exc:
-            messagebox.showerror("NetDiagPeer", str(exc))
+            messagebox.showerror("Проверка сети", str(exc))
             return
         self.status_var.set(success_message)
         self._append_log_line(success_message)
@@ -607,7 +607,7 @@ class NetDiagGui:
                 timeout=15,
             )
         except OSError as exc:
-            messagebox.showerror("NetDiagPeer", str(exc))
+            messagebox.showerror("Проверка сети", str(exc))
             return
 
         if completed.returncode == 0:
@@ -621,7 +621,7 @@ class NetDiagGui:
             details = "{0}\n{1}".format(failure_message, output)
         self.status_var.set("Команда Windows завершилась с ошибкой.")
         self._append_log_line(details)
-        messagebox.showwarning("NetDiagPeer", details)
+        messagebox.showwarning("Проверка сети", details)
 
     def _open_network_center(self) -> None:
         self._launch_windows_target(
@@ -665,8 +665,8 @@ class NetDiagGui:
 def launch_gui() -> int:
     if TKINTER_IMPORT_ERROR is not None or tk is None:
         raise RuntimeError(
-            "Tkinter is not available in this Python environment. "
-            "Install the Tk/Tcl package for Python and try again."
+            "Графический интерфейс Tkinter недоступен в этой среде Python. "
+            "Установите пакет Tk/Tcl для Python и попробуйте снова."
         ) from TKINTER_IMPORT_ERROR
 
     root = tk.Tk()
