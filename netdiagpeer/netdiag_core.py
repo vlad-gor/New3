@@ -20,7 +20,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 
 APP_NAME = "NetDiagPeer"
@@ -584,7 +584,7 @@ class DiscoveryResponder(threading.Thread):
             sock.close()
 
 
-def start_http_server(state: ServerState) -> tuple[ThreadingHTTPServer, threading.Thread]:
+def start_http_server(state: ServerState) -> Tuple[ThreadingHTTPServer, threading.Thread]:
     server = ThreadingHTTPServer(("0.0.0.0", state.http_port), make_handler(state))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -672,7 +672,7 @@ def choose_peer_targets(options: RuntimeOptions, discovered_peers: List[Dict[str
     return unique_targets
 
 
-def create_server_state(options: RuntimeOptions) -> tuple[LocalProfile, ServerState, threading.Event]:
+def create_server_state(options: RuntimeOptions) -> Tuple[LocalProfile, ServerState, threading.Event]:
     profile = build_local_profile()
     instance_id = secrets.token_hex(8)
     state = ServerState(profile, options.port, options.session, instance_id)
@@ -683,7 +683,7 @@ def start_runtime_services(
     state: ServerState,
     stop_event: threading.Event,
     discovery_port: int,
-) -> tuple[ThreadingHTTPServer, threading.Thread, DiscoveryResponder]:
+) -> Tuple[ThreadingHTTPServer, threading.Thread, DiscoveryResponder]:
     try:
         http_server, http_thread = start_http_server(state)
     except OSError as exc:

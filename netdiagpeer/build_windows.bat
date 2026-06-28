@@ -2,19 +2,19 @@
 setlocal
 cd /d "%~dp0"
 
-where py >nul 2>nul
+py -3.8 -V >nul 2>nul
 if errorlevel 1 (
-    echo Python launcher "py" was not found.
-    echo Install Python 3 on Windows and try again.
+    echo Python 3.8 was not found via the "py" launcher.
+    echo Install Python 3.8 to build a Windows 7 compatible executable.
     exit /b 1
 )
 
-echo Installing or updating PyInstaller...
-py -3 -m pip install --upgrade pip pyinstaller
+echo Installing or updating PyInstaller for Python 3.8...
+py -3.8 -m pip install --upgrade pip pyinstaller
 if errorlevel 1 exit /b 1
 
-echo Building NetDiagPeer.exe...
-py -3 -m PyInstaller --noconfirm --clean --onefile --windowed --name NetDiagPeer gui_main.py
+echo Building Windows 7 compatible NetDiagPeer.exe...
+py -3.8 -m PyInstaller --noconfirm --clean --onefile --windowed --name NetDiagPeer gui_main.py
 if errorlevel 1 exit /b 1
 
 echo.

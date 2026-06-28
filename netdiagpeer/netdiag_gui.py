@@ -3,7 +3,7 @@ from __future__ import annotations
 import platform
 import queue
 import threading
-from typing import Optional
+from typing import Dict, List, Optional
 
 from netdiag_core import (
     DEFAULT_CONNECT_TIMEOUT,
@@ -42,12 +42,12 @@ class NetDiagGui:
         self.root.title("NetDiagPeer")
         self.root.geometry("980x760")
 
-        self.queue: "queue.Queue[tuple[str, object]]" = queue.Queue()
+        self.queue = queue.Queue()  # type: queue.Queue
         self.worker: Optional[threading.Thread] = None
         self.current_report: Optional[DiagnosticReport] = None
         self.current_discovery_report: Optional[DiscoveryReport] = None
         self.current_text_report = ""
-        self.discovered_peers: list[dict[str, object]] = []
+        self.discovered_peers = []  # type: List[Dict[str, object]]
 
         self.peer_var = tk.StringVar()
         self.port_var = tk.StringVar(value=str(DEFAULT_HTTP_PORT))
@@ -199,7 +199,7 @@ class NetDiagGui:
         self.search_button.config(state=state)
         self.use_selected_button.config(state=state)
 
-    def _refresh_peers_table(self, peers: list[dict[str, object]]) -> None:
+    def _refresh_peers_table(self, peers: List[Dict[str, object]]) -> None:
         self.discovered_peers = peers
         for item_id in self.peers_table.get_children():
             self.peers_table.delete(item_id)
@@ -220,7 +220,7 @@ class NetDiagGui:
                 values=(hostname, source_ip, http_port, reported_ipv4),
             )
 
-    def _selected_peer(self) -> Optional[dict[str, object]]:
+    def _selected_peer(self) -> Optional[Dict[str, object]]:
         selection = self.peers_table.selection()
         if not selection:
             return None

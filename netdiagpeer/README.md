@@ -36,8 +36,16 @@ When launched on both computers, the application:
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.8 is recommended for Windows 7
 - No external dependencies
+
+### Windows 7 note
+
+For Windows 7 support:
+
+- use Python 3.8 for source-based launches and local builds;
+- ensure Windows 7 SP1 has update `KB2533623` installed, or its newer replacement `KB3063858`;
+- use the Windows build artifact produced by the Windows 7 build workflow, not the older Python 3.12-based artifact.
 
 ## Run
 
@@ -213,7 +221,7 @@ Check #1: 192.168.1.20
 
 ## Build a Windows executable
 
-On a Windows machine with Python installed, run:
+On a Windows machine with Python 3.8 installed, run:
 
 ```bat
 netdiagpeer\build_windows.bat
@@ -223,9 +231,23 @@ The script will:
 
 1. update `pip`;
 2. install the latest `PyInstaller`;
-3. build a windowed one-file executable;
+3. build a windowed one-file executable using Python 3.8 for Windows 7 compatibility;
 4. place the result at:
 
 ```text
 netdiagpeer\dist\NetDiagPeer.exe
+```
+
+## Windows 7 compatible CI build
+
+The repository also contains a GitHub Actions workflow named:
+
+```text
+Build NetDiagPeer Windows 7 EXE
+```
+
+It builds the application on a Windows runner with Python 3.8 and uploads a downloadable artifact named:
+
+```text
+NetDiagPeer-windows7-exe
 ```
