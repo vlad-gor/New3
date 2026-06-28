@@ -25,6 +25,8 @@ DEFAULT_HTTP_PORT = 47821
 DEFAULT_DISCOVERY_PORT = 47822
 DEFAULT_DISCOVERY_TIMEOUT = 5.0
 DEFAULT_CONNECT_TIMEOUT = 3.0
+DEFAULT_STARTUP_DELAY = 2.0
+DEFAULT_LINGER = 2.0
 
 
 @dataclass
@@ -144,12 +146,17 @@ def looks_like_same_lan(local_ips: List[str], peer_ip: Optional[str]) -> Optiona
     except ValueError:
         return None
 
+    if peer_addr.is_loopback:
+        return True
+
     for ip in local_ips:
         try:
             local_addr = ipaddress.ip_address(ip)
         except ValueError:
             continue
 
+        if local_addr.is_loopback and peer_addr.is_loopback:
+            return True
         if local_addr.is_private and peer_addr.is_private and str(local_addr).split(".")[:3] == str(peer_addr).split(".")[:3]:
             return True
 
@@ -385,7 +392,7 @@ def choose_peer_targets(args: argparse.Namespace, discovered_peers: List[Dict[st
     targets = []
 
     if args.peer:
-        targets.append({"host": args.peer, "port": args.port})
+        targets.append({"host": args.peer, "port": args.peer_port or args.port})
 
     for peer in discovered_peers:
         source_ip = peer.get("source_ip")
@@ -595,6 +602,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--peer", help="Имя хоста или IPv4 адрес второго компьютера.")
     parser.add_argument("--port", type=int, default=DEFAULT_HTTP_PORT, help="TCP-порт встроенного HTTP-сервиса.")
     parser.add_argument(
+        "--peer-port",
+        type=int,
+        help="TCP-порт пира, если он отличается от локального --port.",
+    )
+    parser.add_argument(
         "--discovery-port",
         type=int,
         default=DEFAULT_DISCOVERY_PORT,
@@ -611,6 +623,18 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         type=float,
         default=DEFAULT_CONNECT_TIMEOUT,
         help="Таймаут HTTP/TCP-подключения к пиру.",
+    )
+    parser.add_argument(
+        "--startup-delay",
+        type=float,
+        default=DEFAULT_STARTUP_DELAY,
+        help="Сколько секунд подождать после старта сервиса, прежде чем начинать discovery и probe.",
+    )
+    parser.add_argument(
+        "--linger",
+        type=float,
+        default=DEFAULT_LINGER,
+        help="Сколько секунд оставить сервис активным после печати отчета, чтобы второй узел успел проверить соединение.",
     )
     parser.add_argument(
         "--session",
@@ -638,7 +662,7 @@ def run(argv: Optional[List[str]] = None) -> int:
     responder.start()
 
     try:
-        time.sleep(0.2)
+        time.sleep(max(0.0, args.startup_delay))
         discovered_peers = discover_peers(state, args.discovery_port, args.discovery_timeout)
         targets = choose_peer_targets(args, discovered_peers)
         results = [
@@ -657,6 +681,8 @@ def run(argv: Optional[List[str]] = None) -> int:
             print(json.dumps(output, ensure_ascii=False, indent=2))
         else:
             print(render_text_report(profile, discovered_peers, results))
+        if args.linger > 0:
+            time.sleep(args.linger)
         return 0
     finally:
         stop_event.set()

@@ -66,9 +66,12 @@ Main options:
 
 - `--peer` - peer hostname or IPv4 address
 - `--port` - TCP port for the built-in HTTP service
+- `--peer-port` - peer TCP port if it differs from the local port
 - `--discovery-port` - UDP broadcast port
 - `--discovery-timeout` - how long to wait for discovery responses
 - `--connect-timeout` - timeout for direct and reverse connection checks
+- `--startup-delay` - wait time before starting discovery and probing
+- `--linger` - keep the service alive briefly after the report
 - `--session` - logical session name to isolate diagnostics
 - `--json` - machine-readable JSON output
 
