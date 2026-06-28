@@ -3,8 +3,6 @@ from __future__ import annotations
 import platform
 import queue
 import threading
-import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext, ttk
 from typing import Optional
 
 from netdiag_core import (
@@ -21,6 +19,19 @@ from netdiag_core import (
     run_diagnostics,
     save_report_to_path,
 )
+
+try:
+    import tkinter as tk
+    from tkinter import filedialog, messagebox, scrolledtext, ttk
+
+    TKINTER_IMPORT_ERROR: Optional[Exception] = None
+except ModuleNotFoundError as exc:
+    tk = None
+    filedialog = None
+    messagebox = None
+    scrolledtext = None
+    ttk = None
+    TKINTER_IMPORT_ERROR = exc
 
 
 class NetDiagGui:
@@ -254,6 +265,12 @@ class NetDiagGui:
 
 
 def launch_gui() -> int:
+    if TKINTER_IMPORT_ERROR is not None or tk is None:
+        raise RuntimeError(
+            "Tkinter is not available in this Python environment. "
+            "Install the Tk/Tcl package for Python and try again."
+        ) from TKINTER_IMPORT_ERROR
+
     root = tk.Tk()
     NetDiagGui(root)
     root.mainloop()

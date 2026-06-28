@@ -1061,9 +1061,13 @@ def run_cli(options: RuntimeOptions) -> int:
 def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
     if args.gui:
-        from netdiag_gui import launch_gui
+        try:
+            from netdiag_gui import launch_gui
 
-        return launch_gui()
+            return launch_gui()
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
     return run_cli(namespace_to_options(args))
 
 
