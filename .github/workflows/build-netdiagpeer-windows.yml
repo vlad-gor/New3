@@ -1,0 +1,35 @@
+name: Build NetDiagPeer Windows EXE
+
+on:
+  push:
+    branches:
+      - main
+      - cursor/**
+    paths:
+      - ".github/workflows/build-netdiagpeer-windows.yml"
+      - "netdiagpeer/**"
+  workflow_dispatch:
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build NetDiagPeer.exe
+        shell: cmd
+        run: netdiagpeer\build_windows.bat
+
+      - name: Upload Windows EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetDiagPeer-windows-exe
+          path: netdiagpeer/dist/NetDiagPeer.exe
+          if-no-files-found: error
