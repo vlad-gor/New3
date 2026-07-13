@@ -75,7 +75,15 @@ function Invoke-Installer {
     )
 
     Write-Step $Description
-    $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -Wait -PassThru
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $FilePath
+    $startInfo.UseShellExecute = $false
+    foreach ($argument in $Arguments) {
+        [void]$startInfo.ArgumentList.Add($argument)
+    }
+
+    $process = [System.Diagnostics.Process]::Start($startInfo)
+    $process.WaitForExit()
     if ($process.ExitCode -ne 0) {
         throw "$Description failed with exit code $($process.ExitCode)"
     }
@@ -93,7 +101,16 @@ function Invoke-MsiInstaller {
         "/i",
         $FilePath
     ) + $Arguments
-    $process = Start-Process -FilePath "msiexec.exe" -ArgumentList $msiArguments -Wait -PassThru
+
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = "msiexec.exe"
+    $startInfo.UseShellExecute = $false
+    foreach ($argument in $msiArguments) {
+        [void]$startInfo.ArgumentList.Add($argument)
+    }
+
+    $process = [System.Diagnostics.Process]::Start($startInfo)
+    $process.WaitForExit()
     if ($process.ExitCode -ne 0) {
         throw "$Description failed with exit code $($process.ExitCode)"
     }

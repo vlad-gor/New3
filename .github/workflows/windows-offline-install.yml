@@ -136,7 +136,7 @@ jobs:
         shell: pwsh
         run: |
           $installerPath = Join-Path $env:GITHUB_WORKSPACE "installers/postgresql/postgresql-15.18-1-windows-x64.exe"
-          $installRoot = Join-Path $env:RUNNER_TEMP "postgresql15-offline"
+          $installRoot = Join-Path $env:RUNNER_TEMP "postgresql 15 offline"
           $dataDir = Join-Path $installRoot "data"
           $serviceName = "postgresql-x64-15-ci"
           $pgPort = "55432"
@@ -167,7 +167,15 @@ jobs:
             "stackbuilder"
           )
 
-          $process = Start-Process -FilePath $installerPath -ArgumentList $arguments -Wait -PassThru
+          $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+          $startInfo.FileName = $installerPath
+          $startInfo.UseShellExecute = $false
+          foreach ($argument in $arguments) {
+            [void]$startInfo.ArgumentList.Add($argument)
+          }
+
+          $process = [System.Diagnostics.Process]::Start($startInfo)
+          $process.WaitForExit()
           if ($process.ExitCode -ne 0) {
             throw "PostgreSQL installer failed with exit code $($process.ExitCode)"
           }
