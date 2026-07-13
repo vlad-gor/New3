@@ -1,0 +1,422 @@
+name: Test offline Python install on Windows
+
+on:
+  push:
+    branches:
+      - main
+      - cursor/**
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  offline-install:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # GitHub-hosted x64 Windows runners are Windows Server images.
+          # They are the closest available hosted coverage for desktop Windows.
+          - name: Hosted Windows x64 (windows-2022)
+            runner: windows-2022
+          - name: Hosted Windows x64 (windows-2025)
+            runner: windows-2025
+
+    env:
+      INSTALLER_PATH: installers/python-3.13.14-amd64.exe
+      INSTALLER_SHA256: c54d9b9bbb8a36e6489363ddd01139707fd781d72f1f9e90c7ec65d0061368e0
+      NODE_INSTALLER_PATH: installers/node/node-v24.18.0-x64.msi
+      NODE_INSTALLER_SHA256: e30cd4ca15529583afe0efc978f1ae3ab3a93c2400c222d0752d17900552ebb3
+      POSTGRESQL_PARTS_DIR: installers/postgresql/parts
+      POSTGRESQL_REBUILD_SCRIPT: installers/postgresql/rebuild-postgresql-installer.ps1
+      POSTGRESQL_INSTALLER_SHA256: 8d1ac971810b819d861ac6bc47ceaa87a23251c9194f66255ec4ac208d15d688
+      SQLSERVER_PARTS_DIR: installers/sqlserver/parts
+      SQLSERVER_REBUILD_SCRIPT: installers/sqlserver/rebuild-sqlserver-express-installer.ps1
+      SQLSERVER_INSTALLER_SHA256: 2e61c8bbde6021f9026c54ad9db4bbb1227e68761d4c00a6a50a2c70fe7afe05
+      SSMS_BOOTSTRAPPER_PATH: installers/ssms/vs_SSMS.exe
+      SSMS_BOOTSTRAPPER_SHA256: 1f383a4bc871f3100d0fac5b4a0ef1dfed088806410b5b0d004164b1fe2a434c
+      WHEELHOUSE_DIR: wheelhouse/py313-windows-x86_64
+      REQUIREMENTS_FILE: wheelhouse/py313-windows-x86_64/requirements.txt
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show runner details
+        shell: pwsh
+        run: |
+          Write-Host "Runner label: ${{ matrix.runner }}"
+          Write-Host "Image OS: $env:ImageOS"
+          Write-Host "Image version: $env:ImageVersion"
+          cmd /c ver
+
+      - name: Parse PowerShell installer scripts
+        shell: pwsh
+        run: |
+          $files = @(
+            "install-offline-dev-suite.ps1",
+            "install-offline-dev-suite-gui.ps1",
+            "vscode-extensions/install-offline-vscode-extensions.ps1",
+            "installers/vscode/rebuild-vscode-installer.ps1",
+            "installers/postgresql/rebuild-postgresql-installer.ps1",
+            "installers/sqlserver/rebuild-sqlserver-express-installer.ps1",
+            "installers/ssms/create-offline-layout.ps1"
+          )
+
+          foreach ($relativePath in $files) {
+            $fullPath = Join-Path $env:GITHUB_WORKSPACE $relativePath
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($fullPath, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $messages = $errors | ForEach-Object { $_.Message }
+              throw "PowerShell parse failed for $relativePath :: $($messages -join '; ')"
+            }
+          }
+
+      - name: Verify offline assets exist
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:GITHUB_WORKSPACE $env:INSTALLER_PATH
+          $nodeInstaller = Join-Path $env:GITHUB_WORKSPACE $env:NODE_INSTALLER_PATH
+          $postgresqlParts = Join-Path $env:GITHUB_WORKSPACE $env:POSTGRESQL_PARTS_DIR
+          $postgresqlRebuildScript = Join-Path $env:GITHUB_WORKSPACE $env:POSTGRESQL_REBUILD_SCRIPT
+          $sqlParts = Join-Path $env:GITHUB_WORKSPACE $env:SQLSERVER_PARTS_DIR
+          $sqlRebuildScript = Join-Path $env:GITHUB_WORKSPACE $env:SQLSERVER_REBUILD_SCRIPT
+          $ssmsBootstrapper = Join-Path $env:GITHUB_WORKSPACE $env:SSMS_BOOTSTRAPPER_PATH
+          $wheelhouse = Join-Path $env:GITHUB_WORKSPACE $env:WHEELHOUSE_DIR
+          $requirements = Join-Path $env:GITHUB_WORKSPACE $env:REQUIREMENTS_FILE
+
+          foreach ($path in @($installer, $nodeInstaller, $postgresqlParts, $postgresqlRebuildScript, $sqlParts, $sqlRebuildScript, $ssmsBootstrapper, $wheelhouse, $requirements)) {
+            if (-not (Test-Path $path)) {
+              throw "Required offline asset not found: $path"
+            }
+          }
+
+      - name: Verify installer checksum
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:GITHUB_WORKSPACE $env:INSTALLER_PATH
+          $actual = (Get-FileHash -Path $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $env:INSTALLER_SHA256) {
+            throw "Installer checksum mismatch. Expected $env:INSTALLER_SHA256, got $actual"
+          }
+
+      - name: Verify Node.js and SSMS checksums
+        shell: pwsh
+        run: |
+          $nodeInstaller = Join-Path $env:GITHUB_WORKSPACE $env:NODE_INSTALLER_PATH
+          $nodeActual = (Get-FileHash -Path $nodeInstaller -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($nodeActual -ne $env:NODE_INSTALLER_SHA256) {
+            throw "Node.js checksum mismatch. Expected $env:NODE_INSTALLER_SHA256, got $nodeActual"
+          }
+
+          $ssmsBootstrapper = Join-Path $env:GITHUB_WORKSPACE $env:SSMS_BOOTSTRAPPER_PATH
+          $ssmsActual = (Get-FileHash -Path $ssmsBootstrapper -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($ssmsActual -ne $env:SSMS_BOOTSTRAPPER_SHA256) {
+            throw "SSMS checksum mismatch. Expected $env:SSMS_BOOTSTRAPPER_SHA256, got $ssmsActual"
+          }
+
+      - name: Rebuild PostgreSQL installer and verify checksum
+        shell: pwsh
+        run: |
+          $scriptPath = Join-Path $env:GITHUB_WORKSPACE $env:POSTGRESQL_REBUILD_SCRIPT
+          & $scriptPath
+
+          $rebuiltInstaller = Join-Path (Split-Path -Parent $scriptPath) "postgresql-15.18-1-windows-x64.exe"
+          $actual = (Get-FileHash -Path $rebuiltInstaller -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $env:POSTGRESQL_INSTALLER_SHA256) {
+            throw "PostgreSQL checksum mismatch. Expected $env:POSTGRESQL_INSTALLER_SHA256, got $actual"
+          }
+
+      - name: Install PostgreSQL 15 and validate pgAdmin
+        id: install-postgresql
+        shell: pwsh
+        run: |
+          $installerPath = Join-Path $env:GITHUB_WORKSPACE "installers/postgresql/postgresql-15.18-1-windows-x64.exe"
+          $installRoot = Join-Path $env:RUNNER_TEMP "postgresql 15 offline"
+          $dataDir = Join-Path $installRoot "data"
+          $serviceName = "postgresql-x64-15-ci"
+          $pgPort = "55432"
+          $superPassword = "CiPostgres15!"
+
+          $arguments = @(
+            "--mode",
+            "unattended",
+            "--unattendedmodeui",
+            "none",
+            "--install_runtimes",
+            "1",
+            "--prefix",
+            $installRoot,
+            "--datadir",
+            $dataDir,
+            "--serverport",
+            $pgPort,
+            "--servicename",
+            $serviceName,
+            "--superpassword",
+            $superPassword,
+            "--servicepassword",
+            $superPassword,
+            "--enable_acledit",
+            "1",
+            "--disable-components",
+            "stackbuilder"
+          )
+
+          $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+          $startInfo.FileName = $installerPath
+          $startInfo.UseShellExecute = $false
+          foreach ($argument in $arguments) {
+            [void]$startInfo.ArgumentList.Add($argument)
+          }
+
+          $process = [System.Diagnostics.Process]::Start($startInfo)
+          $process.WaitForExit()
+          if ($process.ExitCode -ne 0) {
+            throw "PostgreSQL installer failed with exit code $($process.ExitCode)"
+          }
+
+          $psqlExe = Join-Path $installRoot "bin\psql.exe"
+          $pgIsReadyExe = Join-Path $installRoot "bin\pg_isready.exe"
+          $pgAdminExe = Join-Path $installRoot "pgAdmin 4\runtime\pgAdmin4.exe"
+
+          foreach ($path in @($psqlExe, $pgIsReadyExe, $pgAdminExe)) {
+            if (-not (Test-Path $path)) {
+              throw "Expected PostgreSQL component not found: $path"
+            }
+          }
+
+          $service = Get-Service -Name $serviceName -ErrorAction Stop
+          if ($service.Status -ne "Running") {
+            Start-Service -Name $serviceName
+          }
+
+          $ready = $false
+          for ($attempt = 0; $attempt -lt 20; $attempt++) {
+            & $pgIsReadyExe -h localhost -p $pgPort -U postgres
+            if ($LASTEXITCODE -eq 0) {
+              $ready = $true
+              break
+            }
+            Start-Sleep -Seconds 2
+          }
+
+          if (-not $ready) {
+            throw "PostgreSQL service did not become ready on port $pgPort"
+          }
+
+          $env:PGPASSWORD = $superPassword
+          & $psqlExe -h localhost -p $pgPort -U postgres -d postgres -c "SELECT version();"
+          & $psqlExe --version
+
+          "psql_exe=$psqlExe" >> $env:GITHUB_OUTPUT
+          "pgadmin_exe=$pgAdminExe" >> $env:GITHUB_OUTPUT
+
+      - name: Rebuild SQL Server Express installer and verify checksum
+        shell: pwsh
+        run: |
+          $scriptPath = Join-Path $env:GITHUB_WORKSPACE $env:SQLSERVER_REBUILD_SCRIPT
+          & $scriptPath
+
+          $rebuiltInstaller = Join-Path (Split-Path -Parent $scriptPath) "SQLEXPR_x64_ENU.exe"
+          $actual = (Get-FileHash -Path $rebuiltInstaller -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $env:SQLSERVER_INSTALLER_SHA256) {
+            throw "SQL Server Express checksum mismatch. Expected $env:SQLSERVER_INSTALLER_SHA256, got $actual"
+          }
+
+      - name: Install Node.js from saved installer
+        id: install-node
+        shell: pwsh
+        run: |
+          $nodeInstaller = Join-Path $env:GITHUB_WORKSPACE $env:NODE_INSTALLER_PATH
+          $process = Start-Process -FilePath "msiexec.exe" -ArgumentList @("/i", $nodeInstaller, "/qn", "/norestart") -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Node.js installer failed with exit code $($process.ExitCode)"
+          }
+
+          $nodeExe = Join-Path ${env:ProgramFiles} "nodejs\node.exe"
+          $npmCmd = Join-Path ${env:ProgramFiles} "nodejs\npm.cmd"
+          if (-not (Test-Path $nodeExe)) {
+            throw "Installed node executable not found at $nodeExe"
+          }
+          if (-not (Test-Path $npmCmd)) {
+            throw "Installed npm command not found at $npmCmd"
+          }
+
+          & $nodeExe --version
+          & $npmCmd --version
+          "node_exe=$nodeExe" >> $env:GITHUB_OUTPUT
+          "npm_cmd=$npmCmd" >> $env:GITHUB_OUTPUT
+
+      - name: Install Python 3.13 from saved installer
+        id: install-python
+        shell: pwsh
+        run: |
+          $installRoot = "C:\\Program Files\\Python313OfflineCI"
+          if (Test-Path $installRoot) {
+            Remove-Item -Path $installRoot -Recurse -Force
+          }
+
+          $installer = Join-Path $env:GITHUB_WORKSPACE $env:INSTALLER_PATH
+          $arguments = @(
+            "/quiet",
+            "InstallAllUsers=1",
+            "TargetDir=$installRoot",
+            "DefaultAllUsersTargetDir=$installRoot",
+            "Include_pip=1",
+            "Include_test=0",
+            "AssociateFiles=0",
+            "Shortcuts=0",
+            "PrependPath=1",
+            "Include_launcher=1",
+            "InstallLauncherAllUsers=1"
+          )
+
+          $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+          $startInfo.FileName = $installer
+          $startInfo.UseShellExecute = $false
+          foreach ($argument in $arguments) {
+            [void]$startInfo.ArgumentList.Add($argument)
+          }
+
+          $process = [System.Diagnostics.Process]::Start($startInfo)
+          $process.WaitForExit()
+          if ($process.ExitCode -ne 0) {
+            throw "Python installer failed with exit code $($process.ExitCode)"
+          }
+
+          $pythonExe = Join-Path $installRoot "python.exe"
+          if (-not (Test-Path $pythonExe)) {
+            $pyLauncher = Get-Command py -ErrorAction SilentlyContinue
+            if ($pyLauncher) {
+              $resolved = & $pyLauncher.Source -3.13 -c "import sys; print(sys.executable)" 2>$null
+              if ($LASTEXITCODE -eq 0 -and $resolved) {
+                $candidate = ($resolved | Select-Object -Last 1).Trim()
+                if ($candidate -and (Test-Path $candidate)) {
+                  $pythonExe = $candidate
+                }
+              }
+            }
+          }
+
+          if (-not (Test-Path $pythonExe)) {
+            $fallbacks = @(
+              "C:\Program Files\Python313\python.exe",
+              "C:\Program Files\Python313OfflineCI\python.exe",
+              (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313\python.exe")
+            )
+            foreach ($candidate in $fallbacks) {
+              if (Test-Path $candidate) {
+                $pythonExe = $candidate
+                break
+              }
+            }
+          }
+
+          if (-not (Test-Path $pythonExe)) {
+            throw "Installed python executable could not be resolved after installation."
+          }
+
+          & $pythonExe --version
+          "python_exe=$pythonExe" >> $env:GITHUB_OUTPUT
+
+      - name: Install wheels globally without network access
+        shell: pwsh
+        run: |
+          $pythonExe = "${{ steps.install-python.outputs.python_exe }}"
+          $wheelhouse = Join-Path $env:GITHUB_WORKSPACE $env:WHEELHOUSE_DIR
+          $requirements = Join-Path $env:GITHUB_WORKSPACE $env:REQUIREMENTS_FILE
+
+          & $pythonExe -m pip install --no-index --find-links $wheelhouse -r $requirements
+
+      - name: Verify offline Python stack
+        shell: pwsh
+        run: |
+          $pythonExe = "${{ steps.install-python.outputs.python_exe }}"
+          & $pythonExe -m ipykernel install --user --name "offline-dev-py313" --display-name "Offline Dev Python 3.13"
+          $code = @'
+          import platform
+          import sys
+          import docxtpl
+          import django
+          import fastapi
+          import flask
+          import ipykernel
+          import lxml.etree as etree
+          import matplotlib
+          import matplotlib_venn
+          import notebook
+          import numpy
+          import openpyxl
+          import pandas
+          import PyInstaller
+          import pyxlsb
+          import uvicorn
+          import xlsxwriter
+          from docx import Document
+          from importlib import metadata
+          from PIL import Image
+
+          print(f"python={platform.python_version()}")
+          print(f"auto-py-to-exe={metadata.version('auto-py-to-exe')}")
+          print(f"docxtpl={getattr(docxtpl, '__version__', 'imported')}")
+          print(f"django={django.get_version()}")
+          print(f"fastapi={fastapi.__version__}")
+          print(f"flask={flask.__version__}")
+          print(f"ipykernel={ipykernel.__version__}")
+          print(f"lxml={etree.LXML_VERSION}")
+          print(f"matplotlib={matplotlib.__version__}")
+          print(f"matplotlib-venn={getattr(matplotlib_venn, '__version__', 'imported')}")
+          print(f"notebook={notebook.__version__}")
+          print(f"numpy={numpy.__version__}")
+          print(f"openpyxl={openpyxl.__version__}")
+          print(f"pandas={pandas.__version__}")
+          print(f"pillow={Image.__version__}")
+          print(f"pyinstaller={PyInstaller.__version__}")
+          print(f"pyxlsb={pyxlsb.__version__}")
+          print(f"uvicorn={uvicorn.__version__}")
+          print(f"xlsxwriter={xlsxwriter.__version__}")
+          doc = Document()
+          doc.add_paragraph(\"offline-docx-check\")
+          wb = openpyxl.Workbook()
+          ws = wb.active
+          ws['A1'] = 'offline-openpyxl-check'
+          print(f\"python-docx-paragraphs={len(doc.paragraphs)}\")
+          print(f\"openpyxl-sheet-title={ws.title}\")
+          print(f"executable={sys.executable}")
+          '@
+
+          $scriptPath = Join-Path $env:RUNNER_TEMP "verify_offline_install.py"
+          Set-Content -Path $scriptPath -Value $code -Encoding ascii
+          & $pythonExe $scriptPath
+          & $pythonExe -m pip --version
+          & $pythonExe -m django --version
+          & $pythonExe -m notebook --version
+          & $pythonExe -m PyInstaller --version
+          & $pythonExe -m uvicorn --version
+          & "${{ steps.install-node.outputs.node_exe }}" --version
+          & "${{ steps.install-node.outputs.npm_cmd }}" --version
+          & "${{ steps.install-postgresql.outputs.psql_exe }}" --version
+
+      - name: Run web framework smoke test
+        shell: pwsh
+        run: |
+          $pythonExe = "${{ steps.install-python.outputs.python_exe }}"
+          & $pythonExe "tests/offline_web_stack_smoke.py"
+
+      - name: Publish job summary
+        shell: pwsh
+        run: |
+          @"
+          ## Offline Windows install test
+
+          - Runner: `${{ matrix.runner }}`
+          - Installer: `$env:INSTALLER_PATH`
+          - Node.js installer: `$env:NODE_INSTALLER_PATH`
+          - Wheelhouse: `$env:WHEELHOUSE_DIR`
+          - Verified: installer checksum, Node.js checksum and install, PostgreSQL installer rebuild checksum and real installation (including pgAdmin and psql), SQL Server Express installer rebuild checksum, SSMS bootstrapper checksum, silent install, global offline wheel installation, django/flask/fastapi/uvicorn import, notebook stack import, matplotlib/matplotlib-venn/docxtpl/lxml/openpyxl/pillow/docx/pyxlsb/xlsxwriter import, pyinstaller/auto-py-to-exe import, node/npm/pip/psql version commands, django version command, notebook version command, PyInstaller version command, uvicorn version command, and smoke-test requests against minimal Django/Flask/FastAPI apps
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append

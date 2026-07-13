@@ -1,0 +1,113 @@
+[
+  {
+    "id": "eamodio.gitlens",
+    "display_name": "GitLens \u2014 Git supercharged",
+    "version": "2026.6.270545",
+    "filename": "eamodio.gitlens-2026.6.270545.vsix",
+    "sha256": "b905d38d5bd1cd794bec08a463ff23c7a18940127585e5166109ddbb5251e905",
+    "source": "https://eamodio.gallerycdn.vsassets.io/extensions/eamodio/gitlens/2026.6.270545/1782553625324/Microsoft.VisualStudio.Services.VSIXPackage",
+    "extensionDependencies": [],
+    "extensionPack": []
+  },
+  {
+    "id": "ms-python.debugpy",
+    "display_name": "Python Debugger",
+    "version": "2026.7.11751011",
+    "filename": "ms-python.debugpy-2026.7.11751011.vsix",
+    "sha256": "f3adbb79bbf907fd7bdd0e492ccede44e8f9a67caec5ed8e1b54da21f0c5db18",
+    "source": "https://ms-python.gallerycdn.vsassets.io/extensions/ms-python/debugpy/2026.7.11751011/1782299088041/Microsoft.VisualStudio.Services.VSIXPackage",
+    "extensionDependencies": [
+      "ms-python.python"
+    ],
+    "extensionPack": []
+  },
+  {
+    "id": "ms-python.python",
+    "display_name": "Python",
+    "version": "2026.5.2026061001",
+    "filename": "ms-python.python-2026.5.2026061001.vsix",
+    "sha256": "75e3e33030be1ff003ca26886f4d42f574028dd6ec5924682f375e9f08bb9280",
+    "source": "https://ms-python.gallerycdn.vsassets.io/extensions/ms-python/python/2026.5.2026061001/1781089457873/Microsoft.VisualStudio.Services.VSIXPackage",
+    "extensionDependencies": [],
+    "extensionPack": [
+      "ms-python.vscode-pylance",
+      "ms-python.debugpy",
+      "ms-python.vscode-python-envs"
+    ]
+  },
+  {
+    "id": "ms-python.vscode-pylance",
+    "display_name": "Pylance",
+    "version": "2026.2.106",
+    "filename": "ms-python.vscode-pylance-2026.2.106.vsix",
+    "sha256": "c1de51d2e7ba5e0d3aebc3895e341bb628032f94da6ba660b306da824b185e2f",
+    "source": "https://ms-python.gallerycdn.vsassets.io/extensions/ms-python/vscode-pylance/2026.2.106/1782488767651/Microsoft.VisualStudio.Services.VSIXPackage",
+    "extensionDependencies": [],
+    "extensionPack": []
+  },
+  {
+    "id": "ms-python.vscode-python-envs",
+    "display_name": "Python Environments",
+    "version": "1.37.2026062601",
+    "filename": "ms-python.vscode-python-envs-1.37.2026062601.vsix",
+    "sha256": "f95bb93810868f1c9c2ce58c2af6ac92d91a7e454c34e067c212f2d34e23bd40",
+    "source": "https://ms-python.gallerycdn.vsassets.io/extensions/ms-python/vscode-python-envs/1.37.2026062601/1782470462192/Microsoft.VisualStudio.Services.VSIXPackage",
+    "extensionDependencies": [],
+    "extensionPack": []
+  },
+  {
+    "id": "ms-toolsai.jupyter",
+    "display_name": "Jupyter",
+    "version": "2026.6.2026061001",
+    "filename": "ms-toolsai.jupyter-2026.6.2026061001.vsix",
+    "sha256": "4e1a4f3185bdea9a56d05c175a7d85cca6ee9ed2bc16446c65d537ba7bd03164",
+    "source": "https://ms-toolsai.gallerycdn.vsassets.io/extensions/ms-toolsai/jupyter/2026.6.2026061001/1781085548563/Microsoft.VisualStudio.Services.VSIXPackage",
+    "extensionDependencies": [],
+    "extensionPack": [
+      "ms-toolsai.jupyter-keymap",
+      "ms-toolsai.jupyter-renderers",
+      "ms-toolsai.vscode-jupyter-slideshow",
+      "ms-toolsai.vscode-jupyter-cell-tags"
+    ]
+  },
+  {
+    "id": "ms-toolsai.jupyter-keymap",
+    "display_name": "Jupyter Keymap",
+    "version": "1.1.2",
+    "filename": "ms-toolsai.jupyter-keymap-1.1.2.vsix",
+    "sha256": "f412f2059cd9d19e90434e504b114960d6666437393b7798902c5efd4b262b0b",
+    "source": "https://ms-toolsai.gallerycdn.vsassets.io/extensions/ms-toolsai/jupyter-keymap/1.1.2/1685987377049/Microsoft.VisualStudio.Services.VSIXPackage",
+    "extensionDependencies": [],
+    "extensionPack": []
+  },
+  {
+    "id": "ms-toolsai.jupyter-renderers",
+    "display_name": "Jupyter Notebook Renderers",
+    "version": "1.3.2025062701",
+    "filename": "ms-toolsai.jupyter-renderers-1.3.2025062701.vsix",
+    "sha256": "cfa5e3708d66877fceb7cd8d25011506c14138f914eefc54b95d4c700a62de0c",
+    "source": "https://ms-toolsai.gallerycdn.vsassets.io/extensions/ms-toolsai/jupyter-renderers/1.3.2025062701/1751008411968/Microsoft.VisualStudio.Services.VSIXPackage",
+    "extensionDependencies": [],
+    "extensionPack": []
+  },
+  {
+    "id": "ms-toolsai.vscode-jupyter-cell-tags",
+    "display_name": "Jupyter Cell Tags",
+    "version": "0.1.9",
+    "filename": "ms-toolsai.vscode-jupyter-cell-tags-0.1.9.vsix",
+    "sha256": "5ce0db15b3abda4053cc573426d8e20d47020c15f51dde2e6a396297b9a1a8f6",
+    "source": "https://ms-toolsai.gallerycdn.vsassets.io/extensions/ms-toolsai/vscode-jupyter-cell-tags/0.1.9/1712108263073/Microsoft.VisualStudio.Services.VSIXPackage",
+    "extensionDependencies": [],
+    "extensionPack": []
+  },
+  {
+    "id": "ms-toolsai.vscode-jupyter-slideshow",
+    "display_name": "Jupyter Slide Show",
+    "version": "0.1.6",
+    "filename": "ms-toolsai.vscode-jupyter-slideshow-0.1.6.vsix",
+    "sha256": "7e7b0caeb718773e81cd458c77da403901938e6b446d07a85581b6d155b10ac3",
+    "source": "https://ms-toolsai.gallerycdn.vsassets.io/extensions/ms-toolsai/vscode-jupyter-slideshow/0.1.6/1712108538685/Microsoft.VisualStudio.Services.VSIXPackage",
+    "extensionDependencies": [],
+    "extensionPack": []
+  }
+]
