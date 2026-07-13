@@ -256,19 +256,23 @@ jobs:
         id: install-python
         shell: pwsh
         run: |
-          $installRoot = Join-Path $env:RUNNER_TEMP "python313-offline"
-          New-Item -ItemType Directory -Force -Path $installRoot | Out-Null
+          $installRoot = "C:\\Program Files\\Python313OfflineCI"
+          if (Test-Path $installRoot) {
+            Remove-Item -Path $installRoot -Recurse -Force
+          }
 
           $installer = Join-Path $env:GITHUB_WORKSPACE $env:INSTALLER_PATH
           $arguments = @(
             "/quiet",
-            "InstallAllUsers=0",
+            "InstallAllUsers=1",
             "TargetDir=$installRoot",
             "Include_pip=1",
             "Include_test=0",
             "AssociateFiles=0",
             "Shortcuts=0",
-            "PrependPath=0"
+            "PrependPath=1",
+            "Include_launcher=1",
+            "InstallLauncherAllUsers=1"
           )
 
           $process = Start-Process -FilePath $installer -ArgumentList $arguments -Wait -PassThru

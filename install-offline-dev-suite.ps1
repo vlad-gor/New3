@@ -20,6 +20,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+$defaultPerUserPythonInstallDir = Join-Path $env:LOCALAPPDATA "Programs\Python\Python313"
 
 function Write-Step {
     param([string]$Message)
@@ -220,14 +221,13 @@ function Update-VSCodeSettings {
         [string]$InterpreterPath
     )
 
-    $settingsDir = Join-Path $env:APPDATA "Code\User"
-    $settingsPath = Join-Path $settingsDir "settings.json"
-    New-Item -ItemType Directory -Force -Path $settingsDir | Out-Null
+    $settingsTargets = @(
+        (Join-Path $env:APPDATA "Code\User\settings.json"),
+        (Join-Path $PSScriptRoot ".vscode\settings.json")
+    )
 
-    $updatedWithPython = $false
-    if (Test-Path $PythonExe) {
-        $tempScript = Join-Path $env:TEMP "offline_dev_suite_update_vscode_settings.py"
-        $scriptContent = @'
+    $tempScript = Join-Path $env:TEMP "offline_dev_suite_update_vscode_settings.py"
+    $scriptContent = @'
 import json
 import os
 import shutil
@@ -262,42 +262,50 @@ with open(settings_path, "w", encoding="utf-8") as handle:
     json.dump(data, handle, indent=2, ensure_ascii=False)
     handle.write("\n")
 '@
-        Set-Content -Path $tempScript -Value $scriptContent -Encoding utf8
-        try {
-            & $PythonExe $tempScript $settingsPath $InterpreterPath
-            if ($LASTEXITCODE -eq 0) {
-                $updatedWithPython = $true
-            }
-        }
-        finally {
-            Remove-Item -Path $tempScript -ErrorAction SilentlyContinue
-        }
-    }
 
-    if (-not $updatedWithPython) {
-        $settingsObject = [pscustomobject]@{}
-        if (Test-Path $settingsPath) {
-            $raw = Get-Content -Path $settingsPath -Raw
-            if ($raw.Trim()) {
-                try {
-                    $settingsObject = $raw | ConvertFrom-Json
+    Set-Content -Path $tempScript -Value $scriptContent -Encoding utf8
+    try {
+        foreach ($settingsPath in $settingsTargets) {
+            $settingsDir = Split-Path -Parent $settingsPath
+            New-Item -ItemType Directory -Force -Path $settingsDir | Out-Null
+
+            $updatedWithPython = $false
+            if (Test-Path $PythonExe) {
+                & $PythonExe $tempScript $settingsPath $InterpreterPath
+                if ($LASTEXITCODE -eq 0) {
+                    $updatedWithPython = $true
                 }
-                catch {
-                    $backupPath = "$settingsPath.backup"
-                    if (-not (Test-Path $backupPath)) {
-                        Copy-Item -Path $settingsPath -Destination $backupPath
+            }
+
+            if (-not $updatedWithPython) {
+                $settingsObject = [pscustomobject]@{}
+                if (Test-Path $settingsPath) {
+                    $raw = Get-Content -Path $settingsPath -Raw
+                    if ($raw.Trim()) {
+                        try {
+                            $settingsObject = $raw | ConvertFrom-Json
+                        }
+                        catch {
+                            $backupPath = "$settingsPath.backup"
+                            if (-not (Test-Path $backupPath)) {
+                                Copy-Item -Path $settingsPath -Destination $backupPath
+                            }
+                            $settingsObject = [pscustomobject]@{}
+                        }
                     }
-                    $settingsObject = [pscustomobject]@{}
                 }
+
+                $settingsObject | Add-Member -NotePropertyName "python.defaultInterpreterPath" -NotePropertyValue $InterpreterPath -Force
+                $settingsObject | Add-Member -NotePropertyName "jupyter.jupyterServerType" -NotePropertyValue "local" -Force
+                $settingsObject | ConvertTo-Json -Depth 20 | Set-Content -Path $settingsPath -Encoding utf8
             }
+
+            Write-Host "vscode-settings=$settingsPath"
         }
-
-        $settingsObject | Add-Member -NotePropertyName "python.defaultInterpreterPath" -NotePropertyValue $InterpreterPath -Force
-        $settingsObject | Add-Member -NotePropertyName "jupyter.jupyterServerType" -NotePropertyValue "local" -Force
-        $settingsObject | ConvertTo-Json -Depth 20 | Set-Content -Path $settingsPath -Encoding utf8
     }
-
-    Write-Host "vscode-settings=$settingsPath"
+    finally {
+        Remove-Item -Path $tempScript -ErrorAction SilentlyContinue
+    }
 }
 
 $pythonInstaller = Join-Path $PSScriptRoot "installers\python-3.13.14-amd64.exe"
@@ -324,6 +332,11 @@ $pythonRequirements = Join-Path $pythonWheelhouse "requirements.txt"
 $vscodeExtensionsDir = Join-Path $PSScriptRoot "vscode-extensions"
 $vscodeExtensionsChecksumFile = Join-Path $vscodeExtensionsDir "SHA256SUMS.txt"
 $vscodeExtensionsInstaller = Join-Path $vscodeExtensionsDir "install-offline-vscode-extensions.ps1"
+$installPythonForAllUsers = (Test-IsAdministrator)
+$effectivePythonInstallDir = $PythonInstallDir
+if ($installPythonForAllUsers -and $PythonInstallDir -eq $defaultPerUserPythonInstallDir) {
+    $effectivePythonInstallDir = "C:\Program Files\Python313"
+}
 
 Write-Step "Verifying offline assets"
 Assert-PathExists -Path $pythonInstaller -Description "Python installer"
@@ -416,19 +429,19 @@ if (-not $SkipPostgreSQL) {
 
 Invoke-Installer -FilePath $pythonInstaller -Description "Installing Python 3.13" -Arguments @(
     "/quiet",
-    "InstallAllUsers=0",
-    "TargetDir=""$PythonInstallDir""",
+    ("InstallAllUsers=" + ($(if ($installPythonForAllUsers) { "1" } else { "0" }))),
+    "TargetDir=""$effectivePythonInstallDir""",
     "Include_pip=1",
     "Include_test=0",
     "AssociateFiles=0",
     "Shortcuts=0",
     "PrependPath=1",
     "Include_launcher=1",
-    "InstallLauncherAllUsers=0",
+    ("InstallLauncherAllUsers=" + ($(if ($installPythonForAllUsers) { "1" } else { "0" }))),
     "SimpleInstall=1"
 )
 
-$pythonExe = Join-Path $PythonInstallDir "python.exe"
+$pythonExe = Join-Path $effectivePythonInstallDir "python.exe"
 Assert-PathExists -Path $pythonExe -Description "Installed python executable"
 
 Write-Step "Rebuilding VS Code installer"
@@ -523,8 +536,8 @@ $vsCodeBinCandidates = @(
     (Join-Path ${env:ProgramFiles} "Microsoft VS Code\bin")
 )
 $pythonPathCandidates = @(
-    $PythonInstallDir,
-    (Join-Path $PythonInstallDir "Scripts")
+    $effectivePythonInstallDir,
+    (Join-Path $effectivePythonInstallDir "Scripts")
 )
 
 Ensure-UserPathEntries -Paths ($gitPathCandidates + $nodePathCandidates + $postgresqlPathCandidates + $vsCodeBinCandidates + $pythonPathCandidates)
@@ -606,8 +619,9 @@ if (-not $SkipPostgreSQL) {
         Write-Host "pgAdmin path: $(Join-Path $PostgreSqlInstallDir 'pgAdmin 4\runtime\pgAdmin4.exe')"
     }
 }
-Write-Host "Python installed to: $PythonInstallDir"
-Write-Host "Global site-packages: $(Join-Path $PythonInstallDir 'Lib\site-packages')"
+Write-Host "Python installed to: $effectivePythonInstallDir"
+Write-Host "Python install scope: $(if ($installPythonForAllUsers) { 'all users' } else { 'current user' })"
+Write-Host "Global site-packages: $(Join-Path $effectivePythonInstallDir 'Lib\site-packages')"
 if (-not $SkipSqlServer) {
     Write-Host "SQL Server Express instance: $SqlServerInstanceName"
 }

@@ -82,6 +82,7 @@
 - глобально устанавливает Python-пакеты в Python 3.13
 - регистрирует Jupyter kernel `Offline Dev Python 3.13`
 - устанавливает VS Code extensions
+- обновляет workspace-файл `.vscode/settings.json`, чтобы проект сразу указывал на ожидаемый Python interpreter
 - обновляет `settings.json` VS Code:
   - `python.defaultInterpreterPath`
   - `jupyter.jupyterServerType=local`
@@ -108,6 +109,12 @@
 7. Проверить:
    - выбранный Python interpreter
    - доступность kernel `Offline Dev Python 3.13`
+
+Если installer запускается от администратора и не задан пользовательский путь Python, Python 3.13 ставится для всех пользователей в:
+
+```text
+C:\Program Files\Python313
+```
 
 ### Консольный запуск
 
