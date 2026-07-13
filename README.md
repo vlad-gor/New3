@@ -1,17 +1,120 @@
 # New3
 
-## Offline development suite install
+## Назначение проекта
+
+Репозиторий содержит офлайн-комплекс разработки для Windows.  
+Цель комплекса — развернуть на машине без доступа к сети готовую рабочую среду для:
+
+- Python 3.13 и Jupyter Notebook
+- обработки таблиц Excel и формирования DOCX-документов
+- веб-разработки на Django / Flask / FastAPI
+- упаковки Python-приложений
+- работы в VS Code с уже подготовленными расширениями
+- локальной работы с PostgreSQL 15, SQL Server Express и SSMS
+
+## Из каких частей состоит комплекс
+
+### 1. Системные установщики
+
+Папка `installers/` содержит офлайн-установщики и вспомогательные скрипты для системных компонентов:
+
+- Python 3.13
+- Git for Windows
+- Node.js
+- PostgreSQL 15
+- SQL Server 2022 Express
+- SQL Server Management Studio (SSMS)
+- Visual Studio Code
+
+Для больших дистрибутивов используются split-части и скрипты восстановления полного установщика:
+
+- `installers/vscode/`
+- `installers/sqlserver/`
+- `installers/postgresql/`
+
+### 2. Python wheelhouse
+
+Папка `wheelhouse/py313-windows-x86_64/` содержит офлайн-набор Python-пакетов для Windows x64 и Python 3.13.
+
+В набор входят:
+
+- data stack: `numpy`, `pandas`
+- notebook stack: `notebook`, `ipykernel`
+- plotting: `matplotlib`, `matplotlib-venn`
+- DOCX / Excel: `python-docx`, `docxtpl`, `openpyxl`, `xlsxwriter`, `pyxlsb`, `lxml`, `pillow`
+- packaging: `pyinstaller`, `auto-py-to-exe`
+- web: `django`, `flask`, `fastapi`, `uvicorn`
+
+### 3. VS Code extensions
+
+Папка `vscode-extensions/` содержит офлайн VSIX-набор:
+
+- Python
+- Pylance
+- Python Debugger
+- Python Environments
+- Jupyter и связанные расширения
+- GitLens
+
+### 4. Сценарии установки
+
+В репозитории есть два основных способа установки:
+
+- консольный:
+  - `install-offline-dev-suite.ps1`
+  - `install-offline-dev-suite.cmd`
+- графический:
+  - `install-offline-dev-suite-gui.ps1`
+  - `install-offline-dev-suite-gui.cmd`
+
+### 5. Документация и контекст
+
+- `docs/offline-development-suite-documentation.docx` — подробная документация по комплексу
+- `.cursor/rules/project-context.mdc` — проектный контекст для локального Cursor
+
+## Что делает основной installer
+
+Основной PowerShell installer:
+
+- проверяет наличие и checksum офлайн-артефактов
+- восстанавливает split-установщики при необходимости
+- устанавливает системные компоненты
+- глобально устанавливает Python-пакеты в Python 3.13
+- регистрирует Jupyter kernel `Offline Dev Python 3.13`
+- устанавливает VS Code extensions
+- обновляет `settings.json` VS Code:
+  - `python.defaultInterpreterPath`
+  - `jupyter.jupyterServerType=local`
+- выводит версии ключевых инструментов в конце установки
+
+## Порядок установки
+
+### Рекомендуемый сценарий
+
+1. Распаковать репозиторий на Windows-машине
+2. Если нужны:
+   - Node.js
+   - PostgreSQL 15
+   - SQL Server Express
+   - SSMS
+   
+   запускать installer **из-под администратора**
+3. Выбрать способ установки:
+   - GUI: `install-offline-dev-suite-gui.cmd`
+   - консоль: `install-offline-dev-suite.cmd`
+4. Дождаться завершения установки
+5. Открыть новый терминал, чтобы гарантированно подхватились обновленные PATH и shell integrations
+6. Запустить VS Code
+7. Проверить:
+   - выбранный Python interpreter
+   - доступность kernel `Offline Dev Python 3.13`
+
+### Консольный запуск
 
 PowerShell:
 
 ```powershell
 .\install-offline-dev-suite.ps1
-```
-
-GUI:
-
-```powershell
-.\install-offline-dev-suite-gui.ps1
 ```
 
 Command Prompt:
@@ -20,37 +123,80 @@ Command Prompt:
 install-offline-dev-suite.cmd
 ```
 
-GUI wrapper:
+### Графический запуск
+
+PowerShell:
+
+```powershell
+.\install-offline-dev-suite-gui.ps1
+```
+
+Command Prompt:
 
 ```bat
 install-offline-dev-suite-gui.cmd
 ```
 
-The installer script performs a setup of:
+## Что важно знать по отдельным компонентам
 
-- Git for Windows
-- Node.js
-- Python 3.13
-- PostgreSQL 15
-- Visual Studio Code
-- SQL Server 2022 Express
-- SQL Server Management Studio (SSMS)
-- the offline Python package bundle from `wheelhouse/py313-windows-x86_64`, installed globally into the installed Python 3.13
-- the saved VS Code extensions from `vscode-extensions`
+### Python-пакеты
 
-It also:
+Python-библиотеки устанавливаются **глобально** в установленный Python 3.13, а не в `.venv`.
 
-- enables the VS Code Explorer context menu entries
-- adds VS Code and Python locations to the user PATH
-- registers a ready-to-use Jupyter kernel named `Offline Dev Python 3.13`
-- creates or updates VS Code user settings so `python.defaultInterpreterPath` points at the installed Python 3.13
-- prints the installed Git, Node.js, Python, pip, packaging-tool versions, and VS Code versions at the end
-- provides a GUI installer with checkbox-based component selection and live install logs
+### PostgreSQL 15
 
-Notes:
+- installer восстанавливается из split-частей
+- по умолчанию ставятся:
+  - сервер
+  - command line tools
+  - pgAdmin
+- `pgAdmin` можно пропустить отдельным флагом
 
-- SQL Server Express is stored in split parts and rebuilt during installation.
-- SSMS is stored as a bootstrapper; for fully offline SSMS installation, prepare a local layout in `installers/ssms/layout/`.
-- PostgreSQL 15 is stored in split parts and rebuilt during installation.
-- PostgreSQL 15 is installed together with command-line tools and pgAdmin by default unless pgAdmin is explicitly skipped.
-- Installing Node.js, PostgreSQL 15, SQL Server Express, and SSMS requires running the installer from an elevated Administrator session.
+### SQL Server Express
+
+- installer тоже восстанавливается из split-частей
+- установка выполняется в unattended-режиме
+
+### SSMS
+
+В репозитории хранится bootstrapper.  
+Для полностью офлайн-установки SSMS рекомендуется заранее подготовить layout:
+
+```powershell
+.\installers\ssms\create-offline-layout.ps1
+```
+
+### VS Code
+
+Installer включает:
+
+- контекстное меню `Open with Code`
+- file associations
+- добавление в PATH
+
+## Быстрые проверки после установки
+
+```powershell
+git --version
+node --version
+npm --version
+python --version
+python -m pip --version
+python -m notebook --version
+python -m django --version
+python -m uvicorn --version
+psql --version
+```
+
+## Статус проверки в CI
+
+Windows workflow проверяет:
+
+- checksum и rebuild установщиков
+- установку Node.js
+- установку PostgreSQL 15 и наличие pgAdmin
+- установку Python и глобального wheelhouse
+- импорт Python-стека
+- web smoke-test для Django / Flask / FastAPI
+- работу `uvicorn`
+- PowerShell parser validation для installer-скриптов
