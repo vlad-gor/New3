@@ -1,0 +1,81 @@
+---
+alwaysApply: true
+---
+
+# Project context
+
+This repository contains an offline Windows development suite focused on Python 3.13, VS Code, Jupyter Notebook, document generation, table processing, and packaging tools.
+
+## Main repository parts
+
+- `installers/`
+  - Offline installers for Python 3.13, Git for Windows, and VS Code.
+  - `installers/vscode/` stores the VS Code installer as split parts plus a rebuild script because the full installer exceeds GitHub's normal file-size limit.
+- `wheelhouse/py313-windows-x86_64/`
+  - Offline Python package bundle for Windows x86_64.
+  - Includes data-processing, document, plotting, notebook, and packaging libraries.
+- `vscode-extensions/`
+  - Offline VS Code extension bundle for Python, Jupyter, and Git workflows.
+- `install-offline-dev-suite.ps1`
+  - Main one-command installer for the full offline development suite.
+- `install-offline-dev-suite.cmd`
+  - Thin wrapper for launching the PowerShell installer from `cmd.exe`.
+- `.github/workflows/windows-offline-install.yml`
+  - Windows CI smoke-test for the offline installation flow.
+- `docs/offline-development-suite-documentation.docx`
+  - End-user project documentation with workflow descriptions and usage examples.
+
+## Current installer behavior
+
+- Performs a per-user setup of Git, Python 3.13, and VS Code.
+- Installs Python packages globally into the installed Python 3.13, not into a `.venv`.
+- Registers a Jupyter kernel named `Offline Dev Python 3.13` by default.
+- Installs offline VS Code extensions after VS Code installation.
+- Updates VS Code user settings so:
+  - `python.defaultInterpreterPath` points to the installed Python 3.13
+  - `jupyter.jupyterServerType` is set to `local`
+- Prints installed tool versions at the end of the run.
+
+## Important project assumptions
+
+- The offline Python bundle targets `win_amd64` only.
+- Some packaging-tool dependencies are saved as source archives (`Eel`, `bottle-websocket`) because wheels are not available in the required form.
+- Checksums are important and should be updated when installer or VSIX assets change.
+- This repository is optimized for offline Windows usage first; preserve that assumption when making changes.
+
+## Development guidance
+
+- If installer behavior changes, keep these in sync:
+  - `install-offline-dev-suite.ps1`
+  - `README.md`
+  - `.github/workflows/windows-offline-install.yml`
+- If VS Code extension contents change, also update:
+  - `vscode-extensions/manifest.json`
+  - `vscode-extensions/SHA256SUMS.txt`
+  - `vscode-extensions/install-offline-vscode-extensions.ps1`
+- If installer binaries change, verify file sizes and GitHub limits:
+  - Full files over 100 MB cannot be pushed normally to GitHub.
+  - Files over 50 MB may push successfully but generate warnings.
+  - Prefer split parts when needed, as done for the VS Code installer.
+
+## Validation expectations
+
+- Prefer validating changes with the Windows workflow:
+  - checksum verification
+  - PowerShell parser validation
+  - offline package installation
+  - notebook and library smoke tests
+- When changing notebook/data/doc generation behavior, ensure CI still exercises:
+  - Excel/XLSX handling
+  - matplotlib output
+  - Jupyter kernel availability
+
+## Domain focus
+
+The most important end-user scenario is:
+
+1. Read tabular data from Excel with `pandas`
+2. Transform and analyze the data
+3. Fill DOCX templates with `docxtpl`
+4. Optionally generate charts with `matplotlib`
+5. Work fully offline in VS Code with Jupyter support
