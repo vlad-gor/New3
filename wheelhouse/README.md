@@ -26,6 +26,9 @@ The pinned bundle includes:
 - `matplotlib-venn`
 - `pyinstaller`
 - `auto-py-to-exe`
+- `django`
+- `flask`
+- `fastapi`
 - `docxtpl`
 - `lxml`
 - `openpyxl`

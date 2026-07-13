@@ -134,6 +134,9 @@ jobs:
           import platform
           import sys
           import docxtpl
+          import django
+          import fastapi
+          import flask
           import ipykernel
           import lxml.etree as etree
           import matplotlib
@@ -152,6 +155,9 @@ jobs:
           print(f"python={platform.python_version()}")
           print(f"auto-py-to-exe={metadata.version('auto-py-to-exe')}")
           print(f"docxtpl={getattr(docxtpl, '__version__', 'imported')}")
+          print(f"django={django.get_version()}")
+          print(f"fastapi={fastapi.__version__}")
+          print(f"flask={flask.__version__}")
           print(f"ipykernel={ipykernel.__version__}")
           print(f"lxml={etree.LXML_VERSION}")
           print(f"matplotlib={matplotlib.__version__}")
@@ -178,6 +184,7 @@ jobs:
           Set-Content -Path $scriptPath -Value $code -Encoding ascii
           & $pythonExe $scriptPath
           & $pythonExe -m pip --version
+          & $pythonExe -m django --version
           & $pythonExe -m notebook --version
           & $pythonExe -m PyInstaller --version
 
@@ -190,5 +197,5 @@ jobs:
           - Runner: `${{ matrix.runner }}`
           - Installer: `$env:INSTALLER_PATH`
           - Wheelhouse: `$env:WHEELHOUSE_DIR`
-          - Verified: installer checksum, silent install, global offline wheel installation, notebook stack import, matplotlib/matplotlib-venn/docxtpl/lxml/openpyxl/pillow/docx/pyxlsb/xlsxwriter import, pyinstaller/auto-py-to-exe import, pip version command, notebook version command, PyInstaller version command
+          - Verified: installer checksum, silent install, global offline wheel installation, notebook stack import, django/flask/fastapi import, matplotlib/matplotlib-venn/docxtpl/lxml/openpyxl/pillow/docx/pyxlsb/xlsxwriter import, pyinstaller/auto-py-to-exe import, pip version command, django version command, notebook version command, PyInstaller version command
           "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
