@@ -29,6 +29,7 @@ The pinned bundle includes:
 - `django`
 - `flask`
 - `fastapi`
+- `uvicorn`
 - `docxtpl`
 - `lxml`
 - `openpyxl`
