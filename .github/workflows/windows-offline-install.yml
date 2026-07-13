@@ -29,6 +29,9 @@ jobs:
       INSTALLER_SHA256: c54d9b9bbb8a36e6489363ddd01139707fd781d72f1f9e90c7ec65d0061368e0
       NODE_INSTALLER_PATH: installers/node/node-v24.18.0-x64.msi
       NODE_INSTALLER_SHA256: e30cd4ca15529583afe0efc978f1ae3ab3a93c2400c222d0752d17900552ebb3
+      POSTGRESQL_PARTS_DIR: installers/postgresql/parts
+      POSTGRESQL_REBUILD_SCRIPT: installers/postgresql/rebuild-postgresql-installer.ps1
+      POSTGRESQL_INSTALLER_SHA256: 8d1ac971810b819d861ac6bc47ceaa87a23251c9194f66255ec4ac208d15d688
       SQLSERVER_PARTS_DIR: installers/sqlserver/parts
       SQLSERVER_REBUILD_SCRIPT: installers/sqlserver/rebuild-sqlserver-express-installer.ps1
       SQLSERVER_INSTALLER_SHA256: 2e61c8bbde6021f9026c54ad9db4bbb1227e68761d4c00a6a50a2c70fe7afe05
@@ -56,6 +59,7 @@ jobs:
             "install-offline-dev-suite.ps1",
             "vscode-extensions/install-offline-vscode-extensions.ps1",
             "installers/vscode/rebuild-vscode-installer.ps1",
+            "installers/postgresql/rebuild-postgresql-installer.ps1",
             "installers/sqlserver/rebuild-sqlserver-express-installer.ps1",
             "installers/ssms/create-offline-layout.ps1"
           )
@@ -76,13 +80,15 @@ jobs:
         run: |
           $installer = Join-Path $env:GITHUB_WORKSPACE $env:INSTALLER_PATH
           $nodeInstaller = Join-Path $env:GITHUB_WORKSPACE $env:NODE_INSTALLER_PATH
+          $postgresqlParts = Join-Path $env:GITHUB_WORKSPACE $env:POSTGRESQL_PARTS_DIR
+          $postgresqlRebuildScript = Join-Path $env:GITHUB_WORKSPACE $env:POSTGRESQL_REBUILD_SCRIPT
           $sqlParts = Join-Path $env:GITHUB_WORKSPACE $env:SQLSERVER_PARTS_DIR
           $sqlRebuildScript = Join-Path $env:GITHUB_WORKSPACE $env:SQLSERVER_REBUILD_SCRIPT
           $ssmsBootstrapper = Join-Path $env:GITHUB_WORKSPACE $env:SSMS_BOOTSTRAPPER_PATH
           $wheelhouse = Join-Path $env:GITHUB_WORKSPACE $env:WHEELHOUSE_DIR
           $requirements = Join-Path $env:GITHUB_WORKSPACE $env:REQUIREMENTS_FILE
 
-          foreach ($path in @($installer, $nodeInstaller, $sqlParts, $sqlRebuildScript, $ssmsBootstrapper, $wheelhouse, $requirements)) {
+          foreach ($path in @($installer, $nodeInstaller, $postgresqlParts, $postgresqlRebuildScript, $sqlParts, $sqlRebuildScript, $ssmsBootstrapper, $wheelhouse, $requirements)) {
             if (-not (Test-Path $path)) {
               throw "Required offline asset not found: $path"
             }
@@ -110,6 +116,18 @@ jobs:
           $ssmsActual = (Get-FileHash -Path $ssmsBootstrapper -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($ssmsActual -ne $env:SSMS_BOOTSTRAPPER_SHA256) {
             throw "SSMS checksum mismatch. Expected $env:SSMS_BOOTSTRAPPER_SHA256, got $ssmsActual"
+          }
+
+      - name: Rebuild PostgreSQL installer and verify checksum
+        shell: pwsh
+        run: |
+          $scriptPath = Join-Path $env:GITHUB_WORKSPACE $env:POSTGRESQL_REBUILD_SCRIPT
+          & $scriptPath
+
+          $rebuiltInstaller = Join-Path (Split-Path -Parent $scriptPath) "postgresql-15.18-1-windows-x64.exe"
+          $actual = (Get-FileHash -Path $rebuiltInstaller -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $env:POSTGRESQL_INSTALLER_SHA256) {
+            throw "PostgreSQL checksum mismatch. Expected $env:POSTGRESQL_INSTALLER_SHA256, got $actual"
           }
 
       - name: Rebuild SQL Server Express installer and verify checksum
@@ -273,5 +291,5 @@ jobs:
           - Installer: `$env:INSTALLER_PATH`
           - Node.js installer: `$env:NODE_INSTALLER_PATH`
           - Wheelhouse: `$env:WHEELHOUSE_DIR`
-          - Verified: installer checksum, Node.js checksum and install, SQL Server Express installer rebuild checksum, SSMS bootstrapper checksum, silent install, global offline wheel installation, django/flask/fastapi/uvicorn import, notebook stack import, matplotlib/matplotlib-venn/docxtpl/lxml/openpyxl/pillow/docx/pyxlsb/xlsxwriter import, pyinstaller/auto-py-to-exe import, node/npm/pip version commands, django version command, notebook version command, PyInstaller version command, uvicorn version command, and smoke-test requests against minimal Django/Flask/FastAPI apps
+          - Verified: installer checksum, Node.js checksum and install, PostgreSQL installer rebuild checksum, SQL Server Express installer rebuild checksum, SSMS bootstrapper checksum, silent install, global offline wheel installation, django/flask/fastapi/uvicorn import, notebook stack import, matplotlib/matplotlib-venn/docxtpl/lxml/openpyxl/pillow/docx/pyxlsb/xlsxwriter import, pyinstaller/auto-py-to-exe import, node/npm/pip version commands, django version command, notebook version command, PyInstaller version command, uvicorn version command, and smoke-test requests against minimal Django/Flask/FastAPI apps
           "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append

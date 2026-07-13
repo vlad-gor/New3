@@ -3,11 +3,15 @@ param(
     [switch]$SkipJupyterKernelRegistration,
     [switch]$SkipNode,
     [switch]$SkipGit,
+    [switch]$SkipPostgreSQL,
     [switch]$SkipSqlServer,
     [switch]$SkipSSMS,
     [switch]$SkipVSCode,
     [switch]$SkipPythonPackages,
     [switch]$SkipVSCodeExtensions,
+    [string]$PostgreSqlInstallDir = "C:\Program Files\PostgreSQL\15",
+    [string]$PostgreSqlSuperPassword = "ChangeMe_Postgres15!",
+    [string]$PostgreSqlPort = "5432",
     [string]$SqlServerInstanceName = "SQLEXPRESS",
     [string]$SsmsInstallPath = "C:\Program Files\Microsoft SQL Server Management Studio 22\Release"
 )
@@ -280,6 +284,10 @@ with open(settings_path, "w", encoding="utf-8") as handle:
 $pythonInstaller = Join-Path $PSScriptRoot "installers\python-3.13.14-amd64.exe"
 $nodeInstaller = Join-Path $PSScriptRoot "installers\node\node-v24.18.0-x64.msi"
 $nodeChecksumFile = Join-Path $PSScriptRoot "installers\node\node-v24.18.0-x64.msi.sha256"
+$postgresqlRebuildScript = Join-Path $PSScriptRoot "installers\postgresql\rebuild-postgresql-installer.ps1"
+$postgresqlInstaller = Join-Path $PSScriptRoot "installers\postgresql\postgresql-15.18-1-windows-x64.exe"
+$postgresqlChecksumFile = Join-Path $PSScriptRoot "installers\postgresql\postgresql-15.18-1-windows-x64.exe.sha256"
+$postgresqlPartsChecksumFile = Join-Path $PSScriptRoot "installers\postgresql\parts\SHA256SUMS.txt"
 $gitInstaller = Join-Path $PSScriptRoot "installers\git\Git-2.54.0-64-bit.exe"
 $gitChecksumFile = Join-Path $PSScriptRoot "installers\git\Git-2.54.0-64-bit.exe.sha256"
 $sqlServerRebuildScript = Join-Path $PSScriptRoot "installers\sqlserver\rebuild-sqlserver-express-installer.ps1"
@@ -302,6 +310,9 @@ Write-Step "Verifying offline assets"
 Assert-PathExists -Path $pythonInstaller -Description "Python installer"
 Assert-PathExists -Path $nodeInstaller -Description "Node.js installer"
 Assert-PathExists -Path $nodeChecksumFile -Description "Node.js checksum file"
+Assert-PathExists -Path $postgresqlRebuildScript -Description "PostgreSQL rebuild script"
+Assert-PathExists -Path $postgresqlChecksumFile -Description "PostgreSQL checksum file"
+Assert-PathExists -Path $postgresqlPartsChecksumFile -Description "PostgreSQL parts checksum file"
 Assert-PathExists -Path $gitInstaller -Description "Git installer"
 Assert-PathExists -Path $gitChecksumFile -Description "Git checksum file"
 Assert-PathExists -Path $sqlServerRebuildScript -Description "SQL Server rebuild script"
@@ -318,6 +329,7 @@ Assert-PathExists -Path $vscodeExtensionsInstaller -Description "VS Code extensi
 
 Assert-FileHashValue -Path $pythonInstaller -ExpectedHash "c54d9b9bbb8a36e6489363ddd01139707fd781d72f1f9e90c7ec65d0061368e0"
 Assert-ChecksumFile -BaseDirectory (Join-Path $PSScriptRoot "installers\node") -ChecksumFile $nodeChecksumFile
+Assert-ChecksumFile -BaseDirectory (Join-Path $PSScriptRoot "installers\postgresql\parts") -ChecksumFile $postgresqlPartsChecksumFile
 Assert-ChecksumFile -BaseDirectory (Join-Path $PSScriptRoot "installers\git") -ChecksumFile $gitChecksumFile
 Assert-ChecksumFile -BaseDirectory (Join-Path $PSScriptRoot "installers\sqlserver\parts") -ChecksumFile $sqlServerPartsChecksumFile
 Assert-ChecksumFile -BaseDirectory (Join-Path $PSScriptRoot "installers\ssms") -ChecksumFile $ssmsChecksumFile
@@ -340,6 +352,38 @@ if (-not $SkipNode) {
     Invoke-MsiInstaller -FilePath $nodeInstaller -Description "Installing Node.js" -Arguments @(
         "/qn",
         "/norestart"
+    )
+}
+
+if (-not $SkipPostgreSQL) {
+    Assert-AdministratorFor -Components @("PostgreSQL 15")
+    Write-Step "Rebuilding PostgreSQL 15 installer"
+    & $postgresqlRebuildScript
+    Assert-PathExists -Path $postgresqlInstaller -Description "Rebuilt PostgreSQL installer"
+    Assert-ChecksumFile -BaseDirectory (Join-Path $PSScriptRoot "installers\postgresql") -ChecksumFile $postgresqlChecksumFile
+
+    $postgresqlDataDir = Join-Path $PostgreSqlInstallDir "data"
+    Invoke-Installer -FilePath $postgresqlInstaller -Description "Installing PostgreSQL 15" -Arguments @(
+        "--mode",
+        "unattended",
+        "--unattendedmodeui",
+        "none",
+        "--install_runtimes",
+        "1",
+        "--prefix",
+        $PostgreSqlInstallDir,
+        "--datadir",
+        $postgresqlDataDir,
+        "--serverport",
+        $PostgreSqlPort,
+        "--superpassword",
+        $PostgreSqlSuperPassword,
+        "--servicepassword",
+        $PostgreSqlSuperPassword,
+        "--enable-components",
+        "server,commandlinetools",
+        "--create_shortcuts",
+        "0"
     )
 }
 
@@ -444,6 +488,9 @@ $nodePathCandidates = @(
     (Join-Path ${env:ProgramFiles} "nodejs"),
     (Join-Path $env:LOCALAPPDATA "Programs\nodejs")
 )
+$postgresqlPathCandidates = @(
+    (Join-Path $PostgreSqlInstallDir "bin")
+)
 $vsCodeBinCandidates = @(
     (Join-Path $env:LOCALAPPDATA "Programs\Microsoft VS Code\bin"),
     (Join-Path ${env:ProgramFiles} "Microsoft VS Code\bin")
@@ -453,9 +500,9 @@ $pythonPathCandidates = @(
     (Join-Path $PythonInstallDir "Scripts")
 )
 
-Ensure-UserPathEntries -Paths ($gitPathCandidates + $nodePathCandidates + $vsCodeBinCandidates + $pythonPathCandidates)
+Ensure-UserPathEntries -Paths ($gitPathCandidates + $nodePathCandidates + $postgresqlPathCandidates + $vsCodeBinCandidates + $pythonPathCandidates)
 Refresh-ProcessPathFromRegistry
-Add-ToProcessPath -Paths ($gitPathCandidates + $nodePathCandidates + $vsCodeBinCandidates + $pythonPathCandidates)
+Add-ToProcessPath -Paths ($gitPathCandidates + $nodePathCandidates + $postgresqlPathCandidates + $vsCodeBinCandidates + $pythonPathCandidates)
 
 if (-not $SkipPythonPackages) {
     Write-Step "Installing offline Python package bundle globally"
@@ -498,6 +545,11 @@ if ($npmCommand) {
     & $npmCommand.Source --version
 }
 
+$psqlCommand = Get-Command psql -ErrorAction SilentlyContinue
+if ($psqlCommand) {
+    & $psqlCommand.Source --version
+}
+
 & $pythonExe --version
 & $pythonExe -m pip --version
 & $pythonExe -c "import PyInstaller; from importlib import metadata; print('pyinstaller=' + PyInstaller.__version__); print('auto-py-to-exe=' + metadata.version('auto-py-to-exe'))"
@@ -517,6 +569,11 @@ if ($codeCommand) {
 Write-Step "Offline development suite installation completed"
 if (-not $SkipNode) {
     Write-Host "Node.js installer: $nodeInstaller"
+}
+if (-not $SkipPostgreSQL) {
+    Write-Host "PostgreSQL 15 install dir: $PostgreSqlInstallDir"
+    Write-Host "PostgreSQL port: $PostgreSqlPort"
+    Write-Host "PostgreSQL password: $PostgreSqlSuperPassword"
 }
 Write-Host "Python installed to: $PythonInstallDir"
 Write-Host "Global site-packages: $(Join-Path $PythonInstallDir 'Lib\site-packages')"

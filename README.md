@@ -19,6 +19,7 @@ The installer script performs a setup of:
 - Git for Windows
 - Node.js
 - Python 3.13
+- PostgreSQL 15
 - Visual Studio Code
 - SQL Server 2022 Express
 - SQL Server Management Studio (SSMS)
@@ -37,4 +38,5 @@ Notes:
 
 - SQL Server Express is stored in split parts and rebuilt during installation.
 - SSMS is stored as a bootstrapper; for fully offline SSMS installation, prepare a local layout in `installers/ssms/layout/`.
-- Installing Node.js, SQL Server Express, and SSMS requires running the installer from an elevated Administrator session.
+- PostgreSQL 15 is stored in split parts and rebuilt during installation.
+- Installing Node.js, PostgreSQL 15, SQL Server Express, and SSMS requires running the installer from an elevated Administrator session.

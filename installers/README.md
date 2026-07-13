@@ -73,3 +73,13 @@ Files:
 - `ssms/create-offline-layout.ps1`: helper script for creating a local offline layout
 
 See `installers/ssms/README.md` for the source URL, checksum, layout guidance, and example usage.
+
+## PostgreSQL 15
+
+Files:
+
+- `postgresql/parts/postgresql-15.18-1-windows-x64.exe.part*`: split archive parts for the PostgreSQL 15 installer
+- `postgresql/postgresql-15.18-1-windows-x64.exe.sha256`: checksum for the rebuilt installer
+- `postgresql/rebuild-postgresql-installer.ps1`: helper script to rebuild the installer from the saved parts
+
+See `installers/postgresql/README.md` for the source URL, checksum, and example usage.
