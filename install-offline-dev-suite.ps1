@@ -4,6 +4,7 @@ param(
     [switch]$SkipNode,
     [switch]$SkipGit,
     [switch]$SkipPostgreSQL,
+    [switch]$SkipPgAdmin,
     [switch]$SkipSqlServer,
     [switch]$SkipSSMS,
     [switch]$SkipVSCode,
@@ -12,6 +13,7 @@ param(
     [string]$PostgreSqlInstallDir = "C:\Program Files\PostgreSQL\15",
     [string]$PostgreSqlSuperPassword = "ChangeMe_Postgres15!",
     [string]$PostgreSqlPort = "5432",
+    [string]$PostgreSqlServiceName = "postgresql-x64-15",
     [string]$SqlServerInstanceName = "SQLEXPRESS",
     [string]$SsmsInstallPath = "C:\Program Files\Microsoft SQL Server Management Studio 22\Release"
 )
@@ -363,6 +365,10 @@ if (-not $SkipPostgreSQL) {
     Assert-ChecksumFile -BaseDirectory (Join-Path $PSScriptRoot "installers\postgresql") -ChecksumFile $postgresqlChecksumFile
 
     $postgresqlDataDir = Join-Path $PostgreSqlInstallDir "data"
+    $postgresqlDisabledComponents = @("stackbuilder")
+    if ($SkipPgAdmin) {
+        $postgresqlDisabledComponents += "pgAdmin"
+    }
     Invoke-Installer -FilePath $postgresqlInstaller -Description "Installing PostgreSQL 15" -Arguments @(
         "--mode",
         "unattended",
@@ -376,12 +382,16 @@ if (-not $SkipPostgreSQL) {
         $postgresqlDataDir,
         "--serverport",
         $PostgreSqlPort,
+        "--servicename",
+        $PostgreSqlServiceName,
         "--superpassword",
         $PostgreSqlSuperPassword,
         "--servicepassword",
         $PostgreSqlSuperPassword,
-        "--enable-components",
-        "server,commandlinetools",
+        "--enable_acledit",
+        "1",
+        "--disable-components",
+        ($postgresqlDisabledComponents -join ","),
         "--create_shortcuts",
         "0"
     )
@@ -573,7 +583,11 @@ if (-not $SkipNode) {
 if (-not $SkipPostgreSQL) {
     Write-Host "PostgreSQL 15 install dir: $PostgreSqlInstallDir"
     Write-Host "PostgreSQL port: $PostgreSqlPort"
+    Write-Host "PostgreSQL service: $PostgreSqlServiceName"
     Write-Host "PostgreSQL password: $PostgreSqlSuperPassword"
+    if (-not $SkipPgAdmin) {
+        Write-Host "pgAdmin path: $(Join-Path $PostgreSqlInstallDir 'pgAdmin 4\runtime\pgAdmin4.exe')"
+    }
 }
 Write-Host "Python installed to: $PythonInstallDir"
 Write-Host "Global site-packages: $(Join-Path $PythonInstallDir 'Lib\site-packages')"

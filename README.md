@@ -8,10 +8,22 @@ PowerShell:
 .\install-offline-dev-suite.ps1
 ```
 
+GUI:
+
+```powershell
+.\install-offline-dev-suite-gui.ps1
+```
+
 Command Prompt:
 
 ```bat
 install-offline-dev-suite.cmd
+```
+
+GUI wrapper:
+
+```bat
+install-offline-dev-suite-gui.cmd
 ```
 
 The installer script performs a setup of:
@@ -33,10 +45,12 @@ It also:
 - registers a ready-to-use Jupyter kernel named `Offline Dev Python 3.13`
 - creates or updates VS Code user settings so `python.defaultInterpreterPath` points at the installed Python 3.13
 - prints the installed Git, Node.js, Python, pip, packaging-tool versions, and VS Code versions at the end
+- provides a GUI installer with checkbox-based component selection and live install logs
 
 Notes:
 
 - SQL Server Express is stored in split parts and rebuilt during installation.
 - SSMS is stored as a bootstrapper; for fully offline SSMS installation, prepare a local layout in `installers/ssms/layout/`.
 - PostgreSQL 15 is stored in split parts and rebuilt during installation.
+- PostgreSQL 15 is installed together with command-line tools and pgAdmin by default unless pgAdmin is explicitly skipped.
 - Installing Node.js, PostgreSQL 15, SQL Server Express, and SSMS requires running the installer from an elevated Administrator session.

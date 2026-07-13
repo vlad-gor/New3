@@ -57,6 +57,7 @@ jobs:
         run: |
           $files = @(
             "install-offline-dev-suite.ps1",
+            "install-offline-dev-suite-gui.ps1",
             "vscode-extensions/install-offline-vscode-extensions.ps1",
             "installers/vscode/rebuild-vscode-installer.ps1",
             "installers/postgresql/rebuild-postgresql-installer.ps1",
@@ -129,6 +130,83 @@ jobs:
           if ($actual -ne $env:POSTGRESQL_INSTALLER_SHA256) {
             throw "PostgreSQL checksum mismatch. Expected $env:POSTGRESQL_INSTALLER_SHA256, got $actual"
           }
+
+      - name: Install PostgreSQL 15 and validate pgAdmin
+        id: install-postgresql
+        shell: pwsh
+        run: |
+          $installerPath = Join-Path $env:GITHUB_WORKSPACE "installers/postgresql/postgresql-15.18-1-windows-x64.exe"
+          $installRoot = Join-Path $env:RUNNER_TEMP "postgresql15-offline"
+          $dataDir = Join-Path $installRoot "data"
+          $serviceName = "postgresql-x64-15-ci"
+          $pgPort = "55432"
+          $superPassword = "CiPostgres15!"
+
+          $arguments = @(
+            "--mode",
+            "unattended",
+            "--unattendedmodeui",
+            "none",
+            "--install_runtimes",
+            "1",
+            "--prefix",
+            $installRoot,
+            "--datadir",
+            $dataDir,
+            "--serverport",
+            $pgPort,
+            "--servicename",
+            $serviceName,
+            "--superpassword",
+            $superPassword,
+            "--servicepassword",
+            $superPassword,
+            "--enable_acledit",
+            "1",
+            "--disable-components",
+            "stackbuilder"
+          )
+
+          $process = Start-Process -FilePath $installerPath -ArgumentList $arguments -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "PostgreSQL installer failed with exit code $($process.ExitCode)"
+          }
+
+          $psqlExe = Join-Path $installRoot "bin\psql.exe"
+          $pgIsReadyExe = Join-Path $installRoot "bin\pg_isready.exe"
+          $pgAdminExe = Join-Path $installRoot "pgAdmin 4\runtime\pgAdmin4.exe"
+
+          foreach ($path in @($psqlExe, $pgIsReadyExe, $pgAdminExe)) {
+            if (-not (Test-Path $path)) {
+              throw "Expected PostgreSQL component not found: $path"
+            }
+          }
+
+          $service = Get-Service -Name $serviceName -ErrorAction Stop
+          if ($service.Status -ne "Running") {
+            Start-Service -Name $serviceName
+          }
+
+          $ready = $false
+          for ($attempt = 0; $attempt -lt 20; $attempt++) {
+            & $pgIsReadyExe -h localhost -p $pgPort -U postgres
+            if ($LASTEXITCODE -eq 0) {
+              $ready = $true
+              break
+            }
+            Start-Sleep -Seconds 2
+          }
+
+          if (-not $ready) {
+            throw "PostgreSQL service did not become ready on port $pgPort"
+          }
+
+          $env:PGPASSWORD = $superPassword
+          & $psqlExe -h localhost -p $pgPort -U postgres -d postgres -c "SELECT version();"
+          & $psqlExe --version
+
+          "psql_exe=$psqlExe" >> $env:GITHUB_OUTPUT
+          "pgadmin_exe=$pgAdminExe" >> $env:GITHUB_OUTPUT
 
       - name: Rebuild SQL Server Express installer and verify checksum
         shell: pwsh
@@ -274,6 +352,7 @@ jobs:
           & $pythonExe -m uvicorn --version
           & "${{ steps.install-node.outputs.node_exe }}" --version
           & "${{ steps.install-node.outputs.npm_cmd }}" --version
+          & "${{ steps.install-postgresql.outputs.psql_exe }}" --version
 
       - name: Run web framework smoke test
         shell: pwsh
@@ -291,5 +370,5 @@ jobs:
           - Installer: `$env:INSTALLER_PATH`
           - Node.js installer: `$env:NODE_INSTALLER_PATH`
           - Wheelhouse: `$env:WHEELHOUSE_DIR`
-          - Verified: installer checksum, Node.js checksum and install, PostgreSQL installer rebuild checksum, SQL Server Express installer rebuild checksum, SSMS bootstrapper checksum, silent install, global offline wheel installation, django/flask/fastapi/uvicorn import, notebook stack import, matplotlib/matplotlib-venn/docxtpl/lxml/openpyxl/pillow/docx/pyxlsb/xlsxwriter import, pyinstaller/auto-py-to-exe import, node/npm/pip version commands, django version command, notebook version command, PyInstaller version command, uvicorn version command, and smoke-test requests against minimal Django/Flask/FastAPI apps
+          - Verified: installer checksum, Node.js checksum and install, PostgreSQL installer rebuild checksum and real installation (including pgAdmin and psql), SQL Server Express installer rebuild checksum, SSMS bootstrapper checksum, silent install, global offline wheel installation, django/flask/fastapi/uvicorn import, notebook stack import, matplotlib/matplotlib-venn/docxtpl/lxml/openpyxl/pillow/docx/pyxlsb/xlsxwriter import, pyinstaller/auto-py-to-exe import, node/npm/pip/psql version commands, django version command, notebook version command, PyInstaller version command, uvicorn version command, and smoke-test requests against minimal Django/Flask/FastAPI apps
           "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
