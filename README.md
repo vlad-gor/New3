@@ -14,11 +14,14 @@ Command Prompt:
 install-offline-dev-suite.cmd
 ```
 
-The installer script performs a per-user setup of:
+The installer script performs a setup of:
 
 - Git for Windows
+- Node.js
 - Python 3.13
 - Visual Studio Code
+- SQL Server 2022 Express
+- SQL Server Management Studio (SSMS)
 - the offline Python package bundle from `wheelhouse/py313-windows-x86_64`, installed globally into the installed Python 3.13
 - the saved VS Code extensions from `vscode-extensions`
 
@@ -28,4 +31,10 @@ It also:
 - adds VS Code and Python locations to the user PATH
 - registers a ready-to-use Jupyter kernel named `Offline Dev Python 3.13`
 - creates or updates VS Code user settings so `python.defaultInterpreterPath` points at the installed Python 3.13
-- prints the installed Git, Python, pip, packaging-tool versions, and VS Code versions at the end
+- prints the installed Git, Node.js, Python, pip, packaging-tool versions, and VS Code versions at the end
+
+Notes:
+
+- SQL Server Express is stored in split parts and rebuilt during installation.
+- SSMS is stored as a bootstrapper; for fully offline SSMS installation, prepare a local layout in `installers/ssms/layout/`.
+- Installing Node.js, SQL Server Express, and SSMS requires running the installer from an elevated Administrator session.

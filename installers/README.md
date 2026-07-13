@@ -36,6 +36,15 @@ Files:
 
 See `installers/vscode/README.md` for the source URL, checksum, and example usage.
 
+## Node.js
+
+Files:
+
+- `node/node-v24.18.0-x64.msi`: official Windows x64 MSI installer for Node.js 24.18.0 LTS
+- `node/node-v24.18.0-x64.msi.sha256`: saved checksum file
+
+See `installers/node/README.md` for the source URL, checksum, and example usage.
+
 ## Git for Windows
 
 Files:
@@ -44,3 +53,23 @@ Files:
 - `git/Git-2.54.0-64-bit.exe.sha256`: saved checksum file
 
 See `installers/git/README.md` for the source URL, checksum, and example usage.
+
+## SQL Server Express
+
+Files:
+
+- `sqlserver/parts/SQLEXPR_x64_ENU.exe.part*`: split archive parts for the SQL Server 2022 Express Core installer
+- `sqlserver/SQLEXPR_x64_ENU.exe.sha256`: checksum for the rebuilt installer
+- `sqlserver/rebuild-sqlserver-express-installer.ps1`: helper script to rebuild the installer from the saved parts
+
+See `installers/sqlserver/README.md` for the source URL, checksum, and example usage.
+
+## SQL Server Management Studio (SSMS)
+
+Files:
+
+- `ssms/vs_SSMS.exe`: official SSMS bootstrapper
+- `ssms/vs_SSMS.exe.sha256`: saved checksum file
+- `ssms/create-offline-layout.ps1`: helper script for creating a local offline layout
+
+See `installers/ssms/README.md` for the source URL, checksum, layout guidance, and example usage.

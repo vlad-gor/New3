@@ -27,6 +27,13 @@ jobs:
     env:
       INSTALLER_PATH: installers/python-3.13.14-amd64.exe
       INSTALLER_SHA256: c54d9b9bbb8a36e6489363ddd01139707fd781d72f1f9e90c7ec65d0061368e0
+      NODE_INSTALLER_PATH: installers/node/node-v24.18.0-x64.msi
+      NODE_INSTALLER_SHA256: e30cd4ca15529583afe0efc978f1ae3ab3a93c2400c222d0752d17900552ebb3
+      SQLSERVER_PARTS_DIR: installers/sqlserver/parts
+      SQLSERVER_REBUILD_SCRIPT: installers/sqlserver/rebuild-sqlserver-express-installer.ps1
+      SQLSERVER_INSTALLER_SHA256: 2e61c8bbde6021f9026c54ad9db4bbb1227e68761d4c00a6a50a2c70fe7afe05
+      SSMS_BOOTSTRAPPER_PATH: installers/ssms/vs_SSMS.exe
+      SSMS_BOOTSTRAPPER_SHA256: 1f383a4bc871f3100d0fac5b4a0ef1dfed088806410b5b0d004164b1fe2a434c
       WHEELHOUSE_DIR: wheelhouse/py313-windows-x86_64
       REQUIREMENTS_FILE: wheelhouse/py313-windows-x86_64/requirements.txt
 
@@ -48,7 +55,9 @@ jobs:
           $files = @(
             "install-offline-dev-suite.ps1",
             "vscode-extensions/install-offline-vscode-extensions.ps1",
-            "installers/vscode/rebuild-vscode-installer.ps1"
+            "installers/vscode/rebuild-vscode-installer.ps1",
+            "installers/sqlserver/rebuild-sqlserver-express-installer.ps1",
+            "installers/ssms/create-offline-layout.ps1"
           )
 
           foreach ($relativePath in $files) {
@@ -66,10 +75,14 @@ jobs:
         shell: pwsh
         run: |
           $installer = Join-Path $env:GITHUB_WORKSPACE $env:INSTALLER_PATH
+          $nodeInstaller = Join-Path $env:GITHUB_WORKSPACE $env:NODE_INSTALLER_PATH
+          $sqlParts = Join-Path $env:GITHUB_WORKSPACE $env:SQLSERVER_PARTS_DIR
+          $sqlRebuildScript = Join-Path $env:GITHUB_WORKSPACE $env:SQLSERVER_REBUILD_SCRIPT
+          $ssmsBootstrapper = Join-Path $env:GITHUB_WORKSPACE $env:SSMS_BOOTSTRAPPER_PATH
           $wheelhouse = Join-Path $env:GITHUB_WORKSPACE $env:WHEELHOUSE_DIR
           $requirements = Join-Path $env:GITHUB_WORKSPACE $env:REQUIREMENTS_FILE
 
-          foreach ($path in @($installer, $wheelhouse, $requirements)) {
+          foreach ($path in @($installer, $nodeInstaller, $sqlParts, $sqlRebuildScript, $ssmsBootstrapper, $wheelhouse, $requirements)) {
             if (-not (Test-Path $path)) {
               throw "Required offline asset not found: $path"
             }
@@ -83,6 +96,57 @@ jobs:
           if ($actual -ne $env:INSTALLER_SHA256) {
             throw "Installer checksum mismatch. Expected $env:INSTALLER_SHA256, got $actual"
           }
+
+      - name: Verify Node.js and SSMS checksums
+        shell: pwsh
+        run: |
+          $nodeInstaller = Join-Path $env:GITHUB_WORKSPACE $env:NODE_INSTALLER_PATH
+          $nodeActual = (Get-FileHash -Path $nodeInstaller -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($nodeActual -ne $env:NODE_INSTALLER_SHA256) {
+            throw "Node.js checksum mismatch. Expected $env:NODE_INSTALLER_SHA256, got $nodeActual"
+          }
+
+          $ssmsBootstrapper = Join-Path $env:GITHUB_WORKSPACE $env:SSMS_BOOTSTRAPPER_PATH
+          $ssmsActual = (Get-FileHash -Path $ssmsBootstrapper -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($ssmsActual -ne $env:SSMS_BOOTSTRAPPER_SHA256) {
+            throw "SSMS checksum mismatch. Expected $env:SSMS_BOOTSTRAPPER_SHA256, got $ssmsActual"
+          }
+
+      - name: Rebuild SQL Server Express installer and verify checksum
+        shell: pwsh
+        run: |
+          $scriptPath = Join-Path $env:GITHUB_WORKSPACE $env:SQLSERVER_REBUILD_SCRIPT
+          & $scriptPath
+
+          $rebuiltInstaller = Join-Path (Split-Path -Parent $scriptPath) "SQLEXPR_x64_ENU.exe"
+          $actual = (Get-FileHash -Path $rebuiltInstaller -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $env:SQLSERVER_INSTALLER_SHA256) {
+            throw "SQL Server Express checksum mismatch. Expected $env:SQLSERVER_INSTALLER_SHA256, got $actual"
+          }
+
+      - name: Install Node.js from saved installer
+        id: install-node
+        shell: pwsh
+        run: |
+          $nodeInstaller = Join-Path $env:GITHUB_WORKSPACE $env:NODE_INSTALLER_PATH
+          $process = Start-Process -FilePath "msiexec.exe" -ArgumentList @("/i", $nodeInstaller, "/qn", "/norestart") -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Node.js installer failed with exit code $($process.ExitCode)"
+          }
+
+          $nodeExe = Join-Path ${env:ProgramFiles} "nodejs\node.exe"
+          $npmCmd = Join-Path ${env:ProgramFiles} "nodejs\npm.cmd"
+          if (-not (Test-Path $nodeExe)) {
+            throw "Installed node executable not found at $nodeExe"
+          }
+          if (-not (Test-Path $npmCmd)) {
+            throw "Installed npm command not found at $npmCmd"
+          }
+
+          & $nodeExe --version
+          & $npmCmd --version
+          "node_exe=$nodeExe" >> $env:GITHUB_OUTPUT
+          "npm_cmd=$npmCmd" >> $env:GITHUB_OUTPUT
 
       - name: Install Python 3.13 from saved installer
         id: install-python
@@ -190,6 +254,8 @@ jobs:
           & $pythonExe -m notebook --version
           & $pythonExe -m PyInstaller --version
           & $pythonExe -m uvicorn --version
+          & "${{ steps.install-node.outputs.node_exe }}" --version
+          & "${{ steps.install-node.outputs.npm_cmd }}" --version
 
       - name: Run web framework smoke test
         shell: pwsh
@@ -205,6 +271,7 @@ jobs:
 
           - Runner: `${{ matrix.runner }}`
           - Installer: `$env:INSTALLER_PATH`
+          - Node.js installer: `$env:NODE_INSTALLER_PATH`
           - Wheelhouse: `$env:WHEELHOUSE_DIR`
-          - Verified: installer checksum, silent install, global offline wheel installation, django/flask/fastapi/uvicorn import, notebook stack import, matplotlib/matplotlib-venn/docxtpl/lxml/openpyxl/pillow/docx/pyxlsb/xlsxwriter import, pyinstaller/auto-py-to-exe import, pip version command, django version command, notebook version command, PyInstaller version command, uvicorn version command, and smoke-test requests against minimal Django/Flask/FastAPI apps
+          - Verified: installer checksum, Node.js checksum and install, SQL Server Express installer rebuild checksum, SSMS bootstrapper checksum, silent install, global offline wheel installation, django/flask/fastapi/uvicorn import, notebook stack import, matplotlib/matplotlib-venn/docxtpl/lxml/openpyxl/pillow/docx/pyxlsb/xlsxwriter import, pyinstaller/auto-py-to-exe import, node/npm/pip version commands, django version command, notebook version command, PyInstaller version command, uvicorn version command, and smoke-test requests against minimal Django/Flask/FastAPI apps
           "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append

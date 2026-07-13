@@ -1,10 +1,15 @@
 param(
     [string]$PythonInstallDir = (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313"),
     [switch]$SkipJupyterKernelRegistration,
+    [switch]$SkipNode,
     [switch]$SkipGit,
+    [switch]$SkipSqlServer,
+    [switch]$SkipSSMS,
     [switch]$SkipVSCode,
     [switch]$SkipPythonPackages,
-    [switch]$SkipVSCodeExtensions
+    [switch]$SkipVSCodeExtensions,
+    [string]$SqlServerInstanceName = "SQLEXPRESS",
+    [string]$SsmsInstallPath = "C:\Program Files\Microsoft SQL Server Management Studio 22\Release"
 )
 
 $ErrorActionPreference = "Stop"
@@ -70,6 +75,24 @@ function Invoke-Installer {
     }
 }
 
+function Invoke-MsiInstaller {
+    param(
+        [string]$FilePath,
+        [string[]]$Arguments,
+        [string]$Description
+    )
+
+    Write-Step $Description
+    $msiArguments = @(
+        "/i",
+        $FilePath
+    ) + $Arguments
+    $process = Start-Process -FilePath "msiexec.exe" -ArgumentList $msiArguments -Wait -PassThru
+    if ($process.ExitCode -ne 0) {
+        throw "$Description failed with exit code $($process.ExitCode)"
+    }
+}
+
 function Add-ToProcessPath {
     param([string[]]$Paths)
 
@@ -126,6 +149,21 @@ function Refresh-ProcessPathFromRegistry {
     $combined = @($machinePath, $userPath) | Where-Object { $_ }
     if ($combined.Count -gt 0) {
         $env:PATH = ($combined -join ';')
+    }
+}
+
+function Test-IsAdministrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Assert-AdministratorFor {
+    param([string[]]$Components)
+
+    if (-not (Test-IsAdministrator)) {
+        $joined = $Components -join ", "
+        throw "Administrator privileges are required to install: $joined. Re-run the installer as Administrator or skip those components."
     }
 }
 
@@ -240,8 +278,17 @@ with open(settings_path, "w", encoding="utf-8") as handle:
 }
 
 $pythonInstaller = Join-Path $PSScriptRoot "installers\python-3.13.14-amd64.exe"
+$nodeInstaller = Join-Path $PSScriptRoot "installers\node\node-v24.18.0-x64.msi"
+$nodeChecksumFile = Join-Path $PSScriptRoot "installers\node\node-v24.18.0-x64.msi.sha256"
 $gitInstaller = Join-Path $PSScriptRoot "installers\git\Git-2.54.0-64-bit.exe"
 $gitChecksumFile = Join-Path $PSScriptRoot "installers\git\Git-2.54.0-64-bit.exe.sha256"
+$sqlServerRebuildScript = Join-Path $PSScriptRoot "installers\sqlserver\rebuild-sqlserver-express-installer.ps1"
+$sqlServerInstaller = Join-Path $PSScriptRoot "installers\sqlserver\SQLEXPR_x64_ENU.exe"
+$sqlServerChecksumFile = Join-Path $PSScriptRoot "installers\sqlserver\SQLEXPR_x64_ENU.exe.sha256"
+$sqlServerPartsChecksumFile = Join-Path $PSScriptRoot "installers\sqlserver\parts\SHA256SUMS.txt"
+$ssmsBootstrapper = Join-Path $PSScriptRoot "installers\ssms\vs_SSMS.exe"
+$ssmsChecksumFile = Join-Path $PSScriptRoot "installers\ssms\vs_SSMS.exe.sha256"
+$ssmsLayoutBootstrapper = Join-Path $PSScriptRoot "installers\ssms\layout\vs_SSMS.exe"
 $vscodeRebuildScript = Join-Path $PSScriptRoot "installers\vscode\rebuild-vscode-installer.ps1"
 $vscodeInstaller = Join-Path $PSScriptRoot "installers\vscode\VSCodeUserSetup-x64-1.126.0.exe"
 $vscodePartsChecksumFile = Join-Path $PSScriptRoot "installers\vscode\parts\SHA256SUMS.txt"
@@ -253,8 +300,15 @@ $vscodeExtensionsInstaller = Join-Path $vscodeExtensionsDir "install-offline-vsc
 
 Write-Step "Verifying offline assets"
 Assert-PathExists -Path $pythonInstaller -Description "Python installer"
+Assert-PathExists -Path $nodeInstaller -Description "Node.js installer"
+Assert-PathExists -Path $nodeChecksumFile -Description "Node.js checksum file"
 Assert-PathExists -Path $gitInstaller -Description "Git installer"
 Assert-PathExists -Path $gitChecksumFile -Description "Git checksum file"
+Assert-PathExists -Path $sqlServerRebuildScript -Description "SQL Server rebuild script"
+Assert-PathExists -Path $sqlServerChecksumFile -Description "SQL Server checksum file"
+Assert-PathExists -Path $sqlServerPartsChecksumFile -Description "SQL Server parts checksum file"
+Assert-PathExists -Path $ssmsBootstrapper -Description "SSMS bootstrapper"
+Assert-PathExists -Path $ssmsChecksumFile -Description "SSMS checksum file"
 Assert-PathExists -Path $vscodeRebuildScript -Description "VS Code rebuild script"
 Assert-PathExists -Path $vscodePartsChecksumFile -Description "VS Code parts checksum file"
 Assert-PathExists -Path $pythonWheelhouse -Description "Python wheelhouse"
@@ -263,7 +317,10 @@ Assert-PathExists -Path $vscodeExtensionsChecksumFile -Description "VS Code exte
 Assert-PathExists -Path $vscodeExtensionsInstaller -Description "VS Code extensions installer script"
 
 Assert-FileHashValue -Path $pythonInstaller -ExpectedHash "c54d9b9bbb8a36e6489363ddd01139707fd781d72f1f9e90c7ec65d0061368e0"
+Assert-ChecksumFile -BaseDirectory (Join-Path $PSScriptRoot "installers\node") -ChecksumFile $nodeChecksumFile
 Assert-ChecksumFile -BaseDirectory (Join-Path $PSScriptRoot "installers\git") -ChecksumFile $gitChecksumFile
+Assert-ChecksumFile -BaseDirectory (Join-Path $PSScriptRoot "installers\sqlserver\parts") -ChecksumFile $sqlServerPartsChecksumFile
+Assert-ChecksumFile -BaseDirectory (Join-Path $PSScriptRoot "installers\ssms") -ChecksumFile $ssmsChecksumFile
 Assert-ChecksumFile -BaseDirectory (Join-Path $PSScriptRoot "installers\vscode\parts") -ChecksumFile $vscodePartsChecksumFile
 Assert-ChecksumFile -BaseDirectory $vscodeExtensionsDir -ChecksumFile $vscodeExtensionsChecksumFile
 
@@ -275,6 +332,14 @@ if (-not $SkipGit) {
         "/SP-",
         "/CLOSEAPPLICATIONS",
         "/RESTARTAPPLICATIONS"
+    )
+}
+
+if (-not $SkipNode) {
+    Assert-AdministratorFor -Components @("Node.js")
+    Invoke-MsiInstaller -FilePath $nodeInstaller -Description "Installing Node.js" -Arguments @(
+        "/qn",
+        "/norestart"
     )
 }
 
@@ -299,6 +364,42 @@ Write-Step "Rebuilding VS Code installer"
 & $vscodeRebuildScript
 Assert-PathExists -Path $vscodeInstaller -Description "Rebuilt VS Code installer"
 
+if (-not $SkipSqlServer) {
+    Assert-AdministratorFor -Components @("SQL Server Express")
+    Write-Step "Rebuilding SQL Server Express installer"
+    & $sqlServerRebuildScript
+    Assert-PathExists -Path $sqlServerInstaller -Description "Rebuilt SQL Server Express installer"
+    Assert-ChecksumFile -BaseDirectory (Join-Path $PSScriptRoot "installers\sqlserver") -ChecksumFile $sqlServerChecksumFile
+
+    $sqlExtractDir = Join-Path $env:TEMP "offline-sqlserver-express"
+    if (Test-Path $sqlExtractDir) {
+        Remove-Item -Path $sqlExtractDir -Recurse -Force
+    }
+    New-Item -ItemType Directory -Force -Path $sqlExtractDir | Out-Null
+
+    Invoke-Installer -FilePath $sqlServerInstaller -Description "Extracting SQL Server Express media" -Arguments @(
+        "/Q",
+        "/X:$sqlExtractDir"
+    )
+
+    $sqlSetupExe = Join-Path $sqlExtractDir "setup.exe"
+    Assert-PathExists -Path $sqlSetupExe -Description "SQL Server setup executable"
+
+    Invoke-Installer -FilePath $sqlSetupExe -Description "Installing SQL Server Express" -Arguments @(
+        "/Q",
+        "/IACCEPTSQLSERVERLICENSETERMS",
+        "/ACTION=Install",
+        "/FEATURES=SQLENGINE",
+        "/INSTANCENAME=$SqlServerInstanceName",
+        "/ADDCURRENTUSERASSQLADMIN",
+        "/SQLSYSADMINACCOUNTS=BUILTIN\Administrators",
+        "/SQLSVCSTARTUPTYPE=Automatic",
+        "/TCPENABLED=1",
+        "/NPENABLED=1",
+        "/UpdateEnabled=0"
+    )
+}
+
 if (-not $SkipVSCode) {
     Invoke-Installer -FilePath $vscodeInstaller -Description "Installing Visual Studio Code" -Arguments @(
         "/VERYSILENT",
@@ -309,9 +410,39 @@ if (-not $SkipVSCode) {
     )
 }
 
+if (-not $SkipSSMS) {
+    Assert-AdministratorFor -Components @("SQL Server Management Studio")
+    $ssmsInstallerToUse = $ssmsBootstrapper
+    $ssmsArguments = @(
+        "--quiet",
+        "--wait",
+        "--norestart",
+        "--installPath",
+        $SsmsInstallPath
+    )
+
+    if (Test-Path $ssmsLayoutBootstrapper) {
+        $ssmsInstallerToUse = $ssmsLayoutBootstrapper
+        $ssmsArguments = @(
+            "--noWeb",
+            "--quiet",
+            "--wait",
+            "--norestart",
+            "--installPath",
+            $SsmsInstallPath
+        )
+    }
+
+    Invoke-Installer -FilePath $ssmsInstallerToUse -Description "Installing SQL Server Management Studio" -Arguments $ssmsArguments
+}
+
 $gitPathCandidates = @(
     (Join-Path $env:ProgramFiles "Git\cmd"),
     (Join-Path $env:LOCALAPPDATA "Programs\Git\cmd")
+)
+$nodePathCandidates = @(
+    (Join-Path ${env:ProgramFiles} "nodejs"),
+    (Join-Path $env:LOCALAPPDATA "Programs\nodejs")
 )
 $vsCodeBinCandidates = @(
     (Join-Path $env:LOCALAPPDATA "Programs\Microsoft VS Code\bin"),
@@ -322,9 +453,9 @@ $pythonPathCandidates = @(
     (Join-Path $PythonInstallDir "Scripts")
 )
 
-Ensure-UserPathEntries -Paths ($gitPathCandidates + $vsCodeBinCandidates + $pythonPathCandidates)
+Ensure-UserPathEntries -Paths ($gitPathCandidates + $nodePathCandidates + $vsCodeBinCandidates + $pythonPathCandidates)
 Refresh-ProcessPathFromRegistry
-Add-ToProcessPath -Paths ($gitPathCandidates + $vsCodeBinCandidates + $pythonPathCandidates)
+Add-ToProcessPath -Paths ($gitPathCandidates + $nodePathCandidates + $vsCodeBinCandidates + $pythonPathCandidates)
 
 if (-not $SkipPythonPackages) {
     Write-Step "Installing offline Python package bundle globally"
@@ -357,6 +488,16 @@ if ($gitCommand) {
     & $gitCommand.Source --version
 }
 
+$nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+if ($nodeCommand) {
+    & $nodeCommand.Source --version
+}
+
+$npmCommand = Get-Command npm -ErrorAction SilentlyContinue
+if ($npmCommand) {
+    & $npmCommand.Source --version
+}
+
 & $pythonExe --version
 & $pythonExe -m pip --version
 & $pythonExe -c "import PyInstaller; from importlib import metadata; print('pyinstaller=' + PyInstaller.__version__); print('auto-py-to-exe=' + metadata.version('auto-py-to-exe'))"
@@ -374,8 +515,17 @@ if ($codeCommand) {
 }
 
 Write-Step "Offline development suite installation completed"
+if (-not $SkipNode) {
+    Write-Host "Node.js installer: $nodeInstaller"
+}
 Write-Host "Python installed to: $PythonInstallDir"
 Write-Host "Global site-packages: $(Join-Path $PythonInstallDir 'Lib\site-packages')"
+if (-not $SkipSqlServer) {
+    Write-Host "SQL Server Express instance: $SqlServerInstanceName"
+}
+if (-not $SkipSSMS) {
+    Write-Host "SSMS install path: $SsmsInstallPath"
+}
 Write-Host "Repo-local Python packages came from: $pythonWheelhouse"
 Write-Host "VS Code extensions installed from: $vscodeExtensionsDir"
 Write-Host "If this was run from an old terminal window, open a new terminal to pick up updated PATH and shell integrations."
