@@ -291,7 +291,34 @@ jobs:
 
           $pythonExe = Join-Path $installRoot "python.exe"
           if (-not (Test-Path $pythonExe)) {
-            throw "Installed python executable not found at $pythonExe"
+            $pyLauncher = Get-Command py -ErrorAction SilentlyContinue
+            if ($pyLauncher) {
+              $resolved = & $pyLauncher.Source -3.13 -c "import sys; print(sys.executable)" 2>$null
+              if ($LASTEXITCODE -eq 0 -and $resolved) {
+                $candidate = ($resolved | Select-Object -Last 1).Trim()
+                if ($candidate -and (Test-Path $candidate)) {
+                  $pythonExe = $candidate
+                }
+              }
+            }
+          }
+
+          if (-not (Test-Path $pythonExe)) {
+            $fallbacks = @(
+              "C:\Program Files\Python313\python.exe",
+              "C:\Program Files\Python313OfflineCI\python.exe",
+              (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313\python.exe")
+            )
+            foreach ($candidate in $fallbacks) {
+              if (Test-Path $candidate) {
+                $pythonExe = $candidate
+                break
+              }
+            }
+          }
+
+          if (-not (Test-Path $pythonExe)) {
+            throw "Installed python executable could not be resolved after installation."
           }
 
           & $pythonExe --version

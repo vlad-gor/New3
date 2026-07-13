@@ -176,6 +176,51 @@ function Refresh-ProcessPathFromRegistry {
     }
 }
 
+function Resolve-PythonExecutable {
+    param(
+        [string]$PreferredInstallDir
+    )
+
+    $candidates = @()
+    if ($PreferredInstallDir) {
+        $candidates += (Join-Path $PreferredInstallDir "python.exe")
+    }
+
+    $candidates += @(
+        "C:\Program Files\Python313\python.exe",
+        (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313\python.exe")
+    )
+
+    foreach ($candidate in $candidates | Select-Object -Unique) {
+        if ($candidate -and (Test-Path $candidate)) {
+            return $candidate
+        }
+    }
+
+    $pyLauncher = Get-Command py -ErrorAction SilentlyContinue
+    if ($pyLauncher) {
+        $resolved = & $pyLauncher.Source -3.13 -c "import sys; print(sys.executable)" 2>$null
+        if ($LASTEXITCODE -eq 0 -and $resolved) {
+            $resolvedPath = ($resolved | Select-Object -Last 1).Trim()
+            if ($resolvedPath -and (Test-Path $resolvedPath)) {
+                return $resolvedPath
+            }
+        }
+    }
+
+    $programFiles = @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:LOCALAPPDATA) | Where-Object { $_ }
+    foreach ($root in $programFiles) {
+        $match = Get-ChildItem -Path $root -Filter python.exe -File -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match 'Python313' } |
+            Select-Object -First 1
+        if ($match) {
+            return $match.FullName
+        }
+    }
+
+    throw "Could not resolve the installed Python 3.13 executable."
+}
+
 function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
@@ -427,7 +472,7 @@ if (-not $SkipPostgreSQL) {
     )
 }
 
-Invoke-Installer -FilePath $pythonInstaller -Description "Installing Python 3.13" -Arguments @(
+$pythonInstallArguments = @(
     "/quiet",
     ("InstallAllUsers=" + ($(if ($installPythonForAllUsers) { "1" } else { "0" }))),
     "TargetDir=""$effectivePythonInstallDir""",
@@ -437,12 +482,18 @@ Invoke-Installer -FilePath $pythonInstaller -Description "Installing Python 3.13
     "Shortcuts=0",
     "PrependPath=1",
     "Include_launcher=1",
-    ("InstallLauncherAllUsers=" + ($(if ($installPythonForAllUsers) { "1" } else { "0" }))),
-    "SimpleInstall=1"
+    ("InstallLauncherAllUsers=" + ($(if ($installPythonForAllUsers) { "1" } else { "0" })))
 )
+if ($installPythonForAllUsers) {
+    $pythonInstallArguments += "DefaultAllUsersTargetDir=""$effectivePythonInstallDir"""
+}
+else {
+    $pythonInstallArguments += "SimpleInstall=1"
+}
+Invoke-Installer -FilePath $pythonInstaller -Description "Installing Python 3.13" -Arguments $pythonInstallArguments
 
-$pythonExe = Join-Path $effectivePythonInstallDir "python.exe"
-Assert-PathExists -Path $pythonExe -Description "Installed python executable"
+$pythonExe = Resolve-PythonExecutable -PreferredInstallDir $effectivePythonInstallDir
+$effectivePythonInstallDir = Split-Path -Parent $pythonExe
 
 Write-Step "Rebuilding VS Code installer"
 & $vscodeRebuildScript
