@@ -266,6 +266,7 @@ jobs:
             "/quiet",
             "InstallAllUsers=1",
             "TargetDir=$installRoot",
+            "DefaultAllUsersTargetDir=$installRoot",
             "Include_pip=1",
             "Include_test=0",
             "AssociateFiles=0",
@@ -275,7 +276,15 @@ jobs:
             "InstallLauncherAllUsers=1"
           )
 
-          $process = Start-Process -FilePath $installer -ArgumentList $arguments -Wait -PassThru
+          $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+          $startInfo.FileName = $installer
+          $startInfo.UseShellExecute = $false
+          foreach ($argument in $arguments) {
+            [void]$startInfo.ArgumentList.Add($argument)
+          }
+
+          $process = [System.Diagnostics.Process]::Start($startInfo)
+          $process.WaitForExit()
           if ($process.ExitCode -ne 0) {
             throw "Python installer failed with exit code $($process.ExitCode)"
           }
